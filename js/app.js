@@ -183,12 +183,6 @@ class App {
       document.getElementById('lat').value = pos.lat.toFixed(6);
       document.getElementById('lng').value = pos.lng.toFixed(6);
 
-      // 如果半径有效，自动绘制
-      if (this.circleRadius > 0) {
-        this.mapManager.drawCircle(this.center, this.circleRadius);
-        this._updateInfo();
-      }
-
       // 定位成功样式
       btn.classList.add('located');
 

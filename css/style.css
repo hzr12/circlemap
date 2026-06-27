@@ -101,8 +101,9 @@ input[type="number"] {
 /* ---------- 浮动定位按钮 ---------- */
 .floating-buttons {
   position: fixed;
-  bottom: max(360px, 45vh);
+  top: 16px;
   right: 16px;
+  bottom: auto;
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -177,7 +178,7 @@ input[type="number"] {
   border-top: 1px solid var(--border-color);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   box-shadow: var(--shadow-panel);
-  max-height: 55vh;
+  max-height: 45vh;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -507,7 +508,7 @@ input[type="number"] {
 
 .info-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
 
@@ -556,6 +557,77 @@ input[type="number"] {
   border-radius: 3px;
 }
 
+/* ---------- 小屏幕专用优化 ---------- */
+@media (max-width: 480px) {
+  .panel-body {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .panel-header {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .panel-title {
+    font-size: 16px;
+  }
+
+  .panel-subtitle {
+    font-size: 11px;
+  }
+
+  .action-row .btn {
+    padding: 13px 12px;
+    font-size: 14px;
+  }
+
+  .mode-tab {
+    padding: 10px 6px;
+    font-size: 12px;
+  }
+
+  .coord-input {
+    padding: 11px 10px;
+    font-size: 14px;
+  }
+
+  .radius-input {
+    width: 72px;
+    padding: 7px 6px;
+  }
+
+  .click-hint {
+    font-size: 12px;
+    padding: 9px 10px;
+  }
+
+  .info-item {
+    padding: 10px 6px;
+  }
+
+  .info-value {
+    font-size: 11px;
+  }
+}
+
+/* 超小屏进一步紧凑 */
+@media (max-width: 360px) {
+  .mode-tab svg {
+    display: none;
+  }
+
+  .panel-body {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .panel-header {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}
+
 /* ---------- 响应式：平板 / 桌面 ---------- */
 @media (min-width: 768px) {
   .bottom-panel {
@@ -577,7 +649,12 @@ input[type="number"] {
     padding-top: 6px;
   }
 
+  .info-grid {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+  }
+
   .floating-buttons {
+    top: auto;
     bottom: 24px;
     right: 420px;
   }

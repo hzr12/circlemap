@@ -228,7 +228,8 @@ class MapManager {
       this.marker = new qq.maps.Marker({
         position: latLng,
         map: this.map,
-        draggable: true
+        draggable: true,
+        icon: this._createMarkerIcon()
       });
       // 标记拖拽 → 同步更新已绘制的圆形
       qq.maps.event.addListener(this.marker, 'dragend', (event) => {
@@ -299,6 +300,38 @@ class MapManager {
     if (!this.map) return;
     const entry = CONFIG.ZOOM_MAP.find(e => radius <= e.maxRadius);
     if (entry) this.map.setZoom(entry.zoom);
+  }
+
+  /**
+   * 创建自定义标记图标（渐变色目标圆点）
+   */
+  _createMarkerIcon() {
+    const svg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">',
+      '  <defs>',
+      '    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">',
+      '      <stop offset="0%" stop-color="#00D4AA"/>',
+      '      <stop offset="100%" stop-color="#00A3FF"/>',
+      '    </linearGradient>',
+      '    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">',
+      '      <feDropShadow dx="0" dy="1" stdDeviation="3" flood-opacity="0.45"/>',
+      '    </filter>',
+      '  </defs>',
+      '  <circle cx="16" cy="16" r="14" fill="none" stroke="#00D4AA" stroke-width="1.2" opacity="0.18"/>',
+      '  <circle cx="16" cy="16" r="9" fill="url(#g)" stroke="#fff" stroke-width="2.5" filter="url(#s)"/>',
+      '  <circle cx="16" cy="16" r="3" fill="#fff" opacity="0.95"/>',
+      '</svg>'
+    ].join('\n');
+
+    const dataUri = 'data:image/svg+xml;base64,' + btoa(svg);
+
+    return new qq.maps.MarkerImage(
+      dataUri,
+      new qq.maps.Size(32, 32),
+      new qq.maps.Point(0, 0),
+      new qq.maps.Point(16, 16),
+      new qq.maps.Size(32, 32)
+    );
   }
 
   destroy() {
