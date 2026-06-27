@@ -22,8 +22,8 @@ const CONFIG = {
   MAX_RADIUS: 50000,
   DEFAULT_RADIUS: 5000,
 
-  // 同心圆间隔（米）— 每 1 公里一圈
-  CONCENTRIC_INTERVAL: 1000,
+  // 同心圆间隔（米）— 每 2.5 公里一圈
+  CONCENTRIC_INTERVAL: 2500,
 
   // 画布最小绘制像素阈值
   MIN_DRAW_PX: 4,
