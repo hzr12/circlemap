@@ -25,6 +25,8 @@ class App {
     this._panelCollapsed = window.innerWidth <= 480; // 移动端面板默认收起
     this._watchingBeforeHide = false; // 切后台前是否在追踪
     this._restoringView = false;      // 从后台恢复时不飞地图
+    this._trailPositions = [];        // 历史轨迹点（GCJ-02）
+    this._lastTrailPos = null;        // 上次记录的轨迹位置
   }
 
   /**
@@ -190,6 +192,9 @@ class App {
 
     // —— 清除按钮 ——
     document.getElementById('clear-btn').addEventListener('click', () => this._clearAll());
+
+    // —— 清除轨迹 ——
+    document.getElementById('trail-btn').addEventListener('click', () => this._clearTrail());
 
     // —— GPS 状态条缓存 ——
     this._statusEl = document.getElementById('gps-status');
@@ -487,6 +492,16 @@ class App {
     this._showToast('⏹ 持续追踪已关闭');
   }
 
+  /**
+   * 清除历史轨迹
+   */
+  _clearTrail() {
+    this._trailPositions = [];
+    this._lastTrailPos = null;
+    this.mapManager.clearTrail();
+    this._showToast('🗑 轨迹已清除');
+  }
+
   /* ========== 通用位置处理 ========== */
 
   /**
@@ -530,6 +545,16 @@ class App {
         this._showToast(`✅ 定位成功（精度 ±${pos.accuracy.toFixed(0)} 米）`);
         console.log('[GPS] 首次定位:', pos.lat.toFixed(4), pos.lng.toFixed(4));
       }
+    }
+
+    // —— 记录历史轨迹（每 10m 采一个点） ——
+    if (!this._lastTrailPos || calcDistance(convPos, this._lastTrailPos) > 10) {
+      this._trailPositions.push({lat: convPos.lat, lng: convPos.lng});
+      this._lastTrailPos = convPos;
+      if (this._trailPositions.length > 500) {
+        this._trailPositions = this._trailPositions.slice(-500);
+      }
+      this.mapManager.setTrail(this._trailPositions);
     }
 
     // 刷新所有显示

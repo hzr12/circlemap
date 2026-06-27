@@ -640,6 +640,22 @@ input[type="number"] {
   background: var(--bg-hover);
 }
 
+.btn-ghost {
+  background: transparent;
+  color: var(--text-tertiary);
+  border: none;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.btn-ghost:hover {
+  color: var(--text-secondary);
+}
+
+.btn-ghost:active {
+  color: var(--accent-1);
+}
+
 /* ---------- 信息展示 ---------- */
 .info-area {
   animation: slideUp 0.3s ease;
