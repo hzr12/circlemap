@@ -430,10 +430,12 @@ class MapManager {
             const loc = results[0].geometry.location;
             resolve({ lat: loc.lat, lng: loc.lng });
           } else {
+            console.warn('[CoordConvert] 转换失败，返回原始坐标', results);
             resolve(point); // 转换失败，返回原始坐标
           }
         });
-      } catch (_) {
+      } catch (err) {
+        console.warn('[CoordConvert] 转换异常，返回原始坐标', err.message);
         resolve(point); // 异常降级
       }
     });
