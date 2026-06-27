@@ -416,6 +416,30 @@ class MapManager {
   }
 
   /**
+   * WGS84 → GCJ-02 坐标转换（GPS 纠偏）
+   * 浏览器 Geolocation 返回的是 WGS84，腾讯地图使用 GCJ-02
+   * @param {{lat:number, lng:number}} point
+   * @returns {Promise<{lat:number, lng:number}>}
+   */
+  wgs84ToGcj02(point) {
+    return new Promise((resolve) => {
+      try {
+        const latLng = new qq.maps.LatLng(point.lat, point.lng);
+        qq.maps.convertor.translate([latLng], 1, (results) => {
+          if (results && results[0] && results[0].geometry) {
+            const loc = results[0].geometry.location;
+            resolve({ lat: loc.lat, lng: loc.lng });
+          } else {
+            resolve(point); // 转换失败，返回原始坐标
+          }
+        });
+      } catch (_) {
+        resolve(point); // 异常降级
+      }
+    });
+  }
+
+  /**
    * 自适应缩放
    */
   _zoomToRadius(radius) {

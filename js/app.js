@@ -322,10 +322,11 @@ class App {
 
     try {
       const pos = await this.gpsManager.getCurrentPosition();
+      const convPos = await this.mapManager.wgs84ToGcj02(pos);
 
       // 切换为 click 模式（避免循环触发）
       // 但保持 UI 显示
-      this.center = { lat: pos.lat, lng: pos.lng };
+      this.center = convPos;
 
       // 更新地图位置
       this.mapManager.setCenter(this.center);
@@ -333,8 +334,8 @@ class App {
       this.mapManager.flyTo(this.center);
 
       // 同步到输入框
-      document.getElementById('lat').value = pos.lat.toFixed(6);
-      document.getElementById('lng').value = pos.lng.toFixed(6);
+      document.getElementById('lat').value = convPos.lat.toFixed(6);
+      document.getElementById('lng').value = convPos.lng.toFixed(6);
 
       // 定位成功样式
       btn.classList.add('located');
@@ -364,12 +365,13 @@ class App {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const pos = await this.gpsManager.getCurrentPosition();
-        this.center = { lat: pos.lat, lng: pos.lng };
+        const convPos = await this.mapManager.wgs84ToGcj02(pos);
+        this.center = convPos;
         this.mapManager.setCenter(this.center);
         this.mapManager.setLocation(this.center);
         this.mapManager.flyTo(this.center);
-        document.getElementById('lat').value = pos.lat.toFixed(6);
-        document.getElementById('lng').value = pos.lng.toFixed(6);
+        document.getElementById('lat').value = convPos.lat.toFixed(6);
+        document.getElementById('lng').value = convPos.lng.toFixed(6);
         const btn = document.getElementById('gps-btn');
         btn.classList.add('located');
         setTimeout(() => btn.classList.remove('located'), 3000);
