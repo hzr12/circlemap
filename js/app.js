@@ -24,6 +24,7 @@ class App {
     this._lastRawPos = null;     // 上次原始 WGS84 坐标，用于移动距离判断
     this._panelCollapsed = window.innerWidth <= 480; // 移动端面板默认收起
     this._watchingBeforeHide = false; // 切后台前是否在追踪
+    this._restoringView = false;      // 从后台恢复时不飞地图
   }
 
   /**
@@ -62,6 +63,7 @@ class App {
         }
       } else if (this._watchingBeforeHide) {
         this._watchingBeforeHide = false;
+        this._restoringView = true;
         this._startWatching();
       }
     });
@@ -459,6 +461,10 @@ class App {
     btn.title = '正在持续追踪位置';
 
     this.gpsManager.onPositionChange = (pos) => this._processPosition(pos);
+    this.gpsManager.onError = (err) => {
+      console.warn('[GPS] 追踪出错:', err.message);
+      this._showToast('⚠️ GPS 追踪异常：' + err.message);
+    };
     this.gpsManager.startWatching();
 
     this._showToast('📍 持续追踪已开启');
@@ -503,21 +509,27 @@ class App {
     this.mapManager.setLocation(convPos);
 
     if (this._firstFix) {
-      // 首次定位：飞到我的位置
       this._firstFix = false;
-      this.center = convPos;
-      this.mapManager.setCenter(convPos);
 
-      // 同步到输入框
-      document.getElementById('lat').value = convPos.lat.toFixed(6);
-      document.getElementById('lng').value = convPos.lng.toFixed(6);
+      if (this._restoringView) {
+        // 从后台恢复：更新位置但不飞地图，不弹 toast
+        this._restoringView = false;
+      } else {
+        // 首次定位或手动开启追踪：飞到我的位置
+        this.center = convPos;
+        this.mapManager.setCenter(convPos);
 
-      const btn = document.getElementById('gps-btn');
-      btn.classList.add('located');
-      setTimeout(() => btn.classList.remove('located'), 3000);
+        // 同步到输入框
+        document.getElementById('lat').value = convPos.lat.toFixed(6);
+        document.getElementById('lng').value = convPos.lng.toFixed(6);
 
-      this._showToast(`✅ 定位成功（精度 ±${pos.accuracy.toFixed(0)} 米）`);
-      console.log('[GPS] 首次定位:', pos.lat.toFixed(4), pos.lng.toFixed(4));
+        const btn = document.getElementById('gps-btn');
+        btn.classList.add('located');
+        setTimeout(() => btn.classList.remove('located'), 3000);
+
+        this._showToast(`✅ 定位成功（精度 ±${pos.accuracy.toFixed(0)} 米）`);
+        console.log('[GPS] 首次定位:', pos.lat.toFixed(4), pos.lng.toFixed(4));
+      }
     }
 
     // 刷新所有显示
