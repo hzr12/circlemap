@@ -242,6 +242,12 @@ input[type="number"] {
   color: var(--accent-1);
 }
 
+.gps-stale {
+  color: var(--danger);
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
 /* ---------- 圆列表距离标记 ---------- */
 .circle-dist {
   font-size: 11px;
@@ -277,6 +283,19 @@ input[type="number"] {
   color: #fff;
   background: var(--accent-gradient);
   padding: 1px 8px;
+  border-radius: 10px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.tag-stale {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--danger);
+  background: rgba(255, 71, 87, 0.12);
+  padding: 1px 6px;
   border-radius: 10px;
   margin-left: 4px;
   vertical-align: middle;

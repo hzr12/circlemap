@@ -12,6 +12,7 @@ class App {
     this.circleRadius = CONFIG.DEFAULT_RADIUS;
     this.center = null;          // 当前标记位置
     this.myPosition = null;      // 我的位置（GCJ-02，由 GPS 定位设置）
+    this.myPositionTime = null;  // 上次定位成功时间戳（毫秒）
     this.mode = 'click';
     this._circleListEl = null;   // 圆列表 DOM
     this._statusEl = null;       // GPS 状态条
@@ -35,6 +36,15 @@ class App {
 
     // 进入页面后自动尝试获取一次位置（静默失败）
     this._autoLocate();
+
+    // 每分钟检查定位是否过期，刷新过期提示
+    setInterval(() => {
+      if (this.myPosition) {
+        this._updateStatusBar();
+        this._updateInfo();
+        this._updateCircleList();
+      }
+    }, 60 * 1000);
 
     console.log('[App] 初始化完成');
   }
@@ -345,6 +355,7 @@ class App {
 
       // 保存定位（GCJ-02）
       this.myPosition = convPos;
+      this.myPositionTime = Date.now();
 
       // 刷新距离信息
       this._updateStatusBar();
@@ -382,6 +393,7 @@ class App {
         const convPos = await this.mapManager.wgs84ToGcj02(pos);
         this.center = convPos;
         this.myPosition = convPos;
+        this.myPositionTime = Date.now();
         this.mapManager.setCenter(this.center);
         this.mapManager.setLocation(this.center);
         this.mapManager.flyTo(this.center);
@@ -417,6 +429,16 @@ class App {
 
   /* ============= 状态 & 信息更新 ============= */
 
+  /** 定位过期阈值（毫秒） */
+  get POSITION_STALE_MS() { return 10 * 60 * 1000; } // 10 分钟
+
+  /**
+   * 检查上次定位是否已过期
+   */
+  _isPositionStale() {
+    return this.myPositionTime !== null && (Date.now() - this.myPositionTime) > this.POSITION_STALE_MS;
+  }
+
   /**
    * 更新顶部 GPS 状态条
    */
@@ -441,7 +463,9 @@ class App {
         ? `｜最近圆 ≤ ${formatDistance(nearest.maxRadius)} ✅`
         : `｜最近圆 ${formatDistance(nearDist)}`;
     }
-    this._statusEl.innerHTML = `<span class="gps-online">◉ 已定位</span>${nearStr}`;
+    const stale = this._isPositionStale();
+    const staleIcon = stale ? ' <span class="gps-stale">⚠️ 已过期</span>' : '';
+    this._statusEl.innerHTML = `<span class="gps-online">◉ 已定位</span>${staleIcon}${nearStr}`;
   }
 
   /**
@@ -480,7 +504,8 @@ class App {
     if (this.myPosition && distEl) {
       const dist = calcDistance(this.myPosition, sel.center);
       const within = dist <= sel.maxRadius;
-      distEl.innerHTML = `${formatDistance(dist)}${within ? ' <span class="tag-inrange">范围内</span>' : ''}`;
+      const stale = this._isPositionStale();
+      distEl.innerHTML = `${formatDistance(dist)}${within ? ' <span class="tag-inrange">范围内</span>' : ''}${stale ? ' <span class="tag-stale">可能过期</span>' : ''}`;
     } else if (distEl) {
       distEl.textContent = '--';
     }
@@ -551,7 +576,8 @@ class App {
       if (this.myPosition) {
         const dist = calcDistance(this.myPosition, c.center);
         const within = dist <= c.maxRadius;
-        distStr = formatDistance(dist);
+        const stale = this._isPositionStale();
+        distStr = formatDistance(dist) + (stale ? ' ⚠' : '');
         distClass = within ? 'dist-within' : '';
       }
 
