@@ -19,6 +19,8 @@ class App {
     this._isWatching = false;    // 持续追踪开关
     this._prevDistances = {};    // circleId → 上次距离（米），用于趋势判断
     this._firstFix = true;       // 是否是首次定位
+    this._relocating = false;    // 是否正在自动重定位
+    this._lastRelocateAttempt = 0; // 上次自动重定位时间戳
   }
 
   /**
@@ -43,12 +45,16 @@ class App {
     // 进入页面后自动启动持续 GPS 追踪
     this._startWatching();
 
-    // 每分钟刷新状态 & 持久化
+    // 每分钟刷新状态 & 持久化 & 自动重定位
     setInterval(() => {
       if (this.myPosition) {
         this._updateStatusBar();
         this._updateInfo();
         this._updateCircleList();
+        // 定位已过期且未在持续追踪 → 自动尝试重定位一次
+        if (this._isPositionStale() && !this._isWatching) {
+          this._autoRelocate();
+        }
       }
       this._saveState();
     }, 60 * 1000);
@@ -427,6 +433,41 @@ class App {
     this._updateStatusBar();
     this._updateCircleList();
     this._updateInfo();
+  }
+
+  /**
+   * 定位过期时的自动重定位（单次尝试，不开启追踪）
+   * 由 60s 定时器触发，仅当位置过期且未在追踪时执行
+   */
+  async _autoRelocate() {
+    // 防止并发 / 频繁重试（失败后至少等 5 分钟）
+    if (this._relocating) return;
+    if (Date.now() - this._lastRelocateAttempt < 5 * 60 * 1000) return;
+
+    this._relocating = true;
+    this._showToast('⏳ 定位已过期，正在重新定位...');
+
+    try {
+      const pos = await this.gpsManager.getCurrentPosition();
+      const convPos = this.mapManager.wgs84ToGcj02(pos);
+
+      this.myPosition = convPos;
+      this.myPositionTime = Date.now();
+      this.mapManager.setLocation(convPos);
+      this._prevDistances = {}; // 重置趋势缓存
+
+      this._updateStatusBar();
+      this._updateCircleList();
+      this._updateInfo();
+
+      console.log('[AutoRelocate] 重定位成功:', pos.lat.toFixed(4), pos.lng.toFixed(4));
+    } catch (err) {
+      console.warn('[AutoRelocate] 重定位失败:', err.message);
+      // 失败后留待下一个周期再试（依靠 _lastRelocateAttempt 控制频率）
+    } finally {
+      this._relocating = false;
+      this._lastRelocateAttempt = Date.now();
+    }
   }
 
   /**
