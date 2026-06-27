@@ -21,6 +21,8 @@ class MapManager {
     this._rafId = null;
     this._syncCenter = null;    // 地图实际显示中心（我们追踪，不依赖 getCenter）
 
+    this.locationMarker = null; // 我的位置标记（区别于圆心标识）
+
     // 回调钩子
     this.onCenterChange = null;
   }
@@ -451,10 +453,62 @@ class MapManager {
     );
   }
 
+  /**
+   * 创建我的位置标记图标（蓝色实心圆点，与圆心标识区分）
+   */
+  _createLocationIcon() {
+    const svg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">',
+      '  <defs>',
+      '    <filter id="s" x="-20%" y="-20%" width="140%" height="140%">',
+      '      <feDropShadow dx="0" dy="1" stdDeviation="3" flood-opacity="0.5"/>',
+      '    </filter>',
+      '  </defs>',
+      '  <circle cx="20" cy="20" r="17" fill="none" stroke="#0088FF" stroke-width="1.5" opacity="0.12"/>',
+      '  <circle cx="20" cy="20" r="13" fill="none" stroke="#0088FF" stroke-width="2" opacity="0.28"/>',
+      '  <circle cx="20" cy="20" r="7" fill="#0088FF" stroke="#fff" stroke-width="2.5" filter="url(#s)"/>',
+      '  <circle cx="20" cy="20" r="2.5" fill="#fff" opacity="0.95"/>',
+      '</svg>'
+    ].join('\n');
+
+    const dataUri = 'data:image/svg+xml;base64,' + btoa(svg);
+
+    return new qq.maps.MarkerImage(
+      dataUri,
+      new qq.maps.Size(40, 40),
+      new qq.maps.Point(0, 0),
+      new qq.maps.Point(20, 20),
+      new qq.maps.Size(40, 40)
+    );
+  }
+
+  /**
+   * 在地图上显示我的位置标记
+   * @param {{lat:number, lng:number}} center
+   */
+  setLocation(center) {
+    const latLng = new qq.maps.LatLng(center.lat, center.lng);
+
+    if (this.locationMarker) {
+      this.locationMarker.setPosition(latLng);
+    } else {
+      this.locationMarker = new qq.maps.Marker({
+        position: latLng,
+        map: this.map,
+        draggable: false,
+        icon: this._createLocationIcon()
+      });
+    }
+  }
+
   destroy() {
     if (this.marker) {
       this.marker.setMap(null);
       this.marker = null;
+    }
+    if (this.locationMarker) {
+      this.locationMarker.setMap(null);
+      this.locationMarker = null;
     }
     this.map = null;
     this.center = null;

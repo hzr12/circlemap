@@ -29,7 +29,7 @@ const CONFIG = {
   MIN_DRAW_PX: 4,
 
   // GPS 超时时间（毫秒）
-  GPS_TIMEOUT: 15000,
+  GPS_TIMEOUT: 10000,
 
   // 地图缩放级别与半径适配映射
   ZOOM_MAP: [

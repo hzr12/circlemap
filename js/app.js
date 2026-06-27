@@ -217,6 +217,7 @@ class App {
 
       // 更新地图位置
       this.mapManager.setCenter(this.center);
+      this.mapManager.setLocation(this.center);
       this.mapManager.flyTo(this.center);
 
       // 同步到输入框
@@ -242,23 +243,35 @@ class App {
   }
 
   /**
-   * 页面加载后自动尝试定位一次（静默失败，不弹 Toast）
+   * 页面加载后自动尝试定位（重试 1 次，最多 3 次）
    */
   async _autoLocate() {
-    try {
-      const pos = await this.gpsManager.getCurrentPosition();
-      this.center = { lat: pos.lat, lng: pos.lng };
-      this.mapManager.setCenter(this.center);
-      this.mapManager.flyTo(this.center);
-      document.getElementById('lat').value = pos.lat.toFixed(6);
-      document.getElementById('lng').value = pos.lng.toFixed(6);
-      // 短暂高亮 GPS 按钮表示定位成功
-      const btn = document.getElementById('gps-btn');
-      btn.classList.add('located');
-      setTimeout(() => btn.classList.remove('located'), 3000);
-      console.log('[AutoLocate] 定位成功:', pos.lat.toFixed(4), pos.lng.toFixed(4));
-    } catch (_) {
-      // 静默失败——用户可手动点击 GPS 按钮重试
+    const maxRetries = 1; // 首次失败后重试 1 次 = 最多 2 次尝试
+    this._showToast('⏳ 正在定位...');
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const pos = await this.gpsManager.getCurrentPosition();
+        this.center = { lat: pos.lat, lng: pos.lng };
+        this.mapManager.setCenter(this.center);
+        this.mapManager.setLocation(this.center);
+        this.mapManager.flyTo(this.center);
+        document.getElementById('lat').value = pos.lat.toFixed(6);
+        document.getElementById('lng').value = pos.lng.toFixed(6);
+        const btn = document.getElementById('gps-btn');
+        btn.classList.add('located');
+        setTimeout(() => btn.classList.remove('located'), 3000);
+        this._showToast(`✅ 定位成功（精度 ±${pos.accuracy.toFixed(0)} 米）`);
+        console.log('[AutoLocate] 定位成功:', pos.lat.toFixed(4), pos.lng.toFixed(4));
+        return;
+      } catch (err) {
+        if (attempt < maxRetries) {
+          this._showToast('⏳ 定位失败，正在重试...');
+        } else {
+          this._showToast('❌ 定位失败，可手动点击定位按钮重试');
+          console.warn('[AutoLocate] 定位最终失败:', err.message);
+        }
+      }
     }
   }
 
