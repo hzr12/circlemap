@@ -171,8 +171,25 @@ class App {
     // —— GPS 状态条缓存 ——
     this._statusEl = document.getElementById('gps-status');
 
-    // —— GPS 定位 / 持续追踪按钮 ——
-    document.getElementById('gps-btn').addEventListener('click', () => this._toggleGps());
+    // —— GPS 按钮：短按单次定位，长按切换持续追踪 ——
+    const gpsBtn = document.getElementById('gps-btn');
+    let pressTimer = null;
+    let isLongPress = false;
+    gpsBtn.addEventListener('pointerdown', () => {
+      isLongPress = false;
+      pressTimer = setTimeout(() => {
+        isLongPress = true;
+        this._toggleGps();
+        pressTimer = null;
+      }, 600);
+    });
+    gpsBtn.addEventListener('pointerup', () => {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      if (!isLongPress) this._locateMe();
+    });
+    gpsBtn.addEventListener('pointerleave', () => {
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    });
 
     // —— 圆列表事件委托（选中/删除） ——
     this._circleListEl = document.getElementById('circle-list');
@@ -343,13 +360,57 @@ class App {
   }
 
   /**
-   * 切换持续追踪（点击 GPS 按钮）
+   * 切换持续追踪（长按 GPS 按钮）
    */
   _toggleGps() {
     if (this._isWatching) {
       this._stopWatching();
     } else {
       this._startWatching();
+    }
+  }
+
+  /**
+   * 单次定位（短按 GPS 按钮）
+   * 获取一次位置并飞到该处，不开启持续追踪
+   */
+  async _locateMe() {
+    const btn = document.getElementById('gps-btn');
+    if (this._isWatching) return; // 追踪中不干扰
+    if (this._relocating) return;
+
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    try {
+      const pos = await this.gpsManager.getCurrentPosition();
+      const convPos = this.mapManager.wgs84ToGcj02(pos);
+
+      this.center = convPos;
+      this.myPosition = convPos;
+      this.myPositionTime = Date.now();
+
+      this.mapManager.setCenter(convPos);
+      this.mapManager.setLocation(convPos);
+      this.mapManager.flyTo(convPos);
+
+      document.getElementById('lat').value = convPos.lat.toFixed(6);
+      document.getElementById('lng').value = convPos.lng.toFixed(6);
+
+      this._updateStatusBar();
+      this._updateCircleList();
+      this._updateInfo();
+
+      btn.classList.add('located');
+      setTimeout(() => btn.classList.remove('located'), 3000);
+
+      this._showToast(`✅ 定位成功（精度 ±${pos.accuracy.toFixed(0)} 米）`);
+    } catch (err) {
+      this._showToast('❌ ' + err.message);
+      btn.classList.remove('located');
+    } finally {
+      btn.classList.remove('loading');
+      btn.disabled = false;
     }
   }
 
