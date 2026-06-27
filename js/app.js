@@ -11,8 +11,10 @@ class App {
     this.gpsManager = new GPSManager();
     this.circleRadius = CONFIG.DEFAULT_RADIUS;
     this.center = null;          // 当前标记位置
+    this.myPosition = null;      // 我的位置（GCJ-02，由 GPS 定位设置）
     this.mode = 'click';
     this._circleListEl = null;   // 圆列表 DOM
+    this._statusEl = null;       // GPS 状态条
   }
 
   /**
@@ -143,6 +145,9 @@ class App {
     // —— 清除按钮 ——
     document.getElementById('clear-btn').addEventListener('click', () => this._clearAll());
 
+    // —— GPS 状态条缓存 ——
+    this._statusEl = document.getElementById('gps-status');
+
     // —— GPS 定位按钮 ——
     document.getElementById('gps-btn').addEventListener('click', () => this._locateMe());
 
@@ -214,9 +219,9 @@ class App {
       document.getElementById('radius-slider').value = circle.maxRadius;
       document.getElementById('radius-input').value = circle.maxRadius;
       this.circleRadius = circle.maxRadius;
-      this._updateInfo();
-      this._updateCircleList();
     }
+    this._updateInfo();
+    this._updateCircleList();
   }
 
   /**
@@ -305,6 +310,7 @@ class App {
     this.mapManager.addCircle(this.center, this.circleRadius);
     this._updateInfo();
     this._updateCircleList();
+    this._updateStatusBar();
     this._showToast(`已创建同心圆，半径 ${
       this.circleRadius >= 1000
         ? (this.circleRadius / 1000).toFixed(1) + ' km'
@@ -337,6 +343,14 @@ class App {
       document.getElementById('lat').value = convPos.lat.toFixed(6);
       document.getElementById('lng').value = convPos.lng.toFixed(6);
 
+      // 保存定位（GCJ-02）
+      this.myPosition = convPos;
+
+      // 刷新距离信息
+      this._updateStatusBar();
+      this._updateCircleList();
+      this._updateInfo();
+
       // 定位成功样式
       btn.classList.add('located');
 
@@ -367,6 +381,7 @@ class App {
         const pos = await this.gpsManager.getCurrentPosition();
         const convPos = await this.mapManager.wgs84ToGcj02(pos);
         this.center = convPos;
+        this.myPosition = convPos;
         this.mapManager.setCenter(this.center);
         this.mapManager.setLocation(this.center);
         this.mapManager.flyTo(this.center);
@@ -375,6 +390,7 @@ class App {
         const btn = document.getElementById('gps-btn');
         btn.classList.add('located');
         setTimeout(() => btn.classList.remove('located'), 3000);
+        this._updateStatusBar();
         this._showToast(`✅ 定位成功（精度 ±${pos.accuracy.toFixed(0)} 米）`);
         console.log('[AutoLocate] 定位成功:', pos.lat.toFixed(4), pos.lng.toFixed(4));
         return;
@@ -396,9 +412,37 @@ class App {
     this.mapManager.clearCircles();
     document.getElementById('infoArea').classList.add('hidden');
     this._updateCircleList();
+    this._updateStatusBar();
   }
 
-  /* ============= 信息更新 ============= */
+  /* ============= 状态 & 信息更新 ============= */
+
+  /**
+   * 更新顶部 GPS 状态条
+   */
+  _updateStatusBar() {
+    if (!this._statusEl) return;
+    if (!this.myPosition) {
+      this._statusEl.innerHTML = '<span class="gps-offline">⊙ 未定位，点击 GPS 按钮定位</span>';
+      return;
+    }
+    // 找最近圆
+    const circles = this.mapManager.getCircles();
+    let nearest = null;
+    let nearDist = Infinity;
+    for (const c of circles) {
+      const d = calcDistance(this.myPosition, c.center);
+      if (d < nearDist) { nearDist = d; nearest = c; }
+    }
+    let nearStr = '';
+    if (nearest) {
+      const within = nearDist <= nearest.maxRadius;
+      nearStr = within
+        ? `｜最近圆 ≤ ${formatDistance(nearest.maxRadius)} ✅`
+        : `｜最近圆 ${formatDistance(nearDist)}`;
+    }
+    this._statusEl.innerHTML = `<span class="gps-online">◉ 已定位</span>${nearStr}`;
+  }
 
   /**
    * 更新信息展示区（显示选中圆圈的信息）
@@ -430,6 +474,16 @@ class App {
 
     const ringCount = Math.ceil(sel.maxRadius / sel.interval);
     document.getElementById('info-rings').textContent = `${ringCount} 圈`;
+
+    // —— 距我距离 ——
+    const distEl = document.getElementById('info-distance');
+    if (this.myPosition && distEl) {
+      const dist = calcDistance(this.myPosition, sel.center);
+      const within = dist <= sel.maxRadius;
+      distEl.innerHTML = `${formatDistance(dist)}${within ? ' <span class="tag-inrange">范围内</span>' : ''}`;
+    } else if (distEl) {
+      distEl.textContent = '--';
+    }
   }
 
   /* ============= 圆列表管理 ============= */
@@ -450,6 +504,7 @@ class App {
     }
     this._updateInfo();
     this._updateCircleList();
+    this._updateStatusBar();
   }
 
   /**
@@ -459,6 +514,7 @@ class App {
     this.mapManager.removeCircle(id);
     this._updateInfo();
     this._updateCircleList();
+    this._updateStatusBar();
     if (this.mapManager.getCircles().length === 0) {
       this._showToast('已清除全部');
     }
@@ -489,12 +545,23 @@ class App {
         : c.maxRadius + ' m';
       const coordStr = c.center.lat.toFixed(4) + ', ' + c.center.lng.toFixed(4);
 
+      // 距离信息
+      let distStr = '';
+      let distClass = '';
+      if (this.myPosition) {
+        const dist = calcDistance(this.myPosition, c.center);
+        const within = dist <= c.maxRadius;
+        distStr = formatDistance(dist);
+        distClass = within ? 'dist-within' : '';
+      }
+
       html += `<div class="circle-item${isSel ? ' active' : ''}" data-id="${c.id}">
         <span class="circle-idx">#${i + 1}</span>
         <div class="circle-summary">
           <div class="circle-name">${radiusStr}</div>
           <div class="circle-meta">${ringCount}圈 · ${coordStr}</div>
         </div>
+        <span class="circle-dist ${distClass}">${distStr}</span>
         <button class="circle-del" aria-label="删除此圆">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>

@@ -207,12 +207,12 @@ input[type="number"] {
 
 /* 面板头部 */
 .panel-header {
-  padding: 0 20px 12px;
+  padding: 0 20px 10px;
   text-align: center;
 }
 
 .panel-title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.02em;
   background: var(--accent-gradient);
@@ -221,12 +221,65 @@ input[type="number"] {
   background-clip: text;
 }
 
-.panel-subtitle {
-  display: block;
-  font-size: 12px;
+/* ---------- GPS 状态条 ---------- */
+.gps-status {
+  padding: 4px 20px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  text-align: center;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gps-status .gps-offline {
+  color: var(--text-tertiary);
+}
+
+.gps-status .gps-online {
+  color: var(--accent-1);
+}
+
+/* ---------- 圆列表距离标记 ---------- */
+.circle-dist {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
   color: var(--text-secondary);
-  margin-top: 2px;
-  font-weight: 400;
+  padding: 2px 8px;
+  background: var(--bg-input);
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.circle-dist.dist-within {
+  color: var(--accent-1);
+  background: rgba(0, 212, 170, 0.12);
+}
+
+/* ---------- 距离信息 + 圈内标签 ---------- */
+.info-item-dist {
+  grid-column: 1 / -1;
+}
+
+.info-item-dist .info-value {
+  font-size: 14px;
+}
+
+.tag-inrange {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  color: #fff;
+  background: var(--accent-gradient);
+  padding: 1px 8px;
+  border-radius: 10px;
+  margin-left: 4px;
+  vertical-align: middle;
 }
 
 /* 面板主体 */
@@ -703,8 +756,12 @@ input[type="number"] {
   border-radius: 3px;
 }
 
-/* ---------- 小屏幕专用优化 ---------- */
+/* ---------- 小屏幕专用优化（移动端重构） ---------- */
 @media (max-width: 480px) {
+  .bottom-panel {
+    max-height: 50vh;
+  }
+
   .panel-body {
     padding-left: 14px;
     padding-right: 14px;
@@ -716,59 +773,138 @@ input[type="number"] {
   }
 
   .panel-title {
-    font-size: 16px;
+    font-size: 15px;
   }
 
   .panel-subtitle {
-    font-size: 11px;
+    display: none;
+  }
+
+  .gps-status {
+    font-size: 10px;
+    padding: 2px 14px 6px;
+  }
+
+  .action-row {
+    margin-bottom: 10px;
   }
 
   .action-row .btn {
-    padding: 13px 12px;
-    font-size: 14px;
+    padding: 11px 10px;
+    font-size: 13px;
+  }
+
+  .action-row .btn svg {
+    display: none;
   }
 
   .mode-tab {
-    padding: 10px 6px;
+    padding: 8px 6px;
     font-size: 12px;
+  }
+
+  .mode-tab svg {
+    display: none;
+  }
+
+  .radius-section {
+    margin-bottom: 10px;
+  }
+
+  .radius-header {
+    margin-bottom: 6px;
   }
 
   .coord-input {
-    padding: 11px 10px;
-    font-size: 14px;
+    padding: 9px 10px;
+    font-size: 13px;
   }
 
   .radius-input {
-    width: 72px;
-    padding: 7px 6px;
+    width: 68px;
+    padding: 5px 6px;
+    font-size: 13px;
   }
 
   .click-hint {
+    font-size: 11px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+  }
+
+  .parse-section {
+    margin-bottom: 10px;
+  }
+
+  .input-group.visible {
+    margin-bottom: 10px;
+  }
+
+  .circle-list-section {
+    margin-bottom: 10px;
+  }
+
+  .circle-item {
+    padding: 7px 8px;
+  }
+
+  .circle-idx {
+    width: 20px;
+    height: 20px;
+    font-size: 9px;
+  }
+
+  .circle-name {
     font-size: 12px;
-    padding: 9px 10px;
+  }
+
+  .circle-meta {
+    font-size: 10px;
+  }
+
+  .circle-dist {
+    font-size: 10px;
+    padding: 1px 6px;
+  }
+
+  .info-grid {
+    gap: 4px;
   }
 
   .info-item {
-    padding: 10px 6px;
+    padding: 8px 6px;
   }
 
   .info-value {
     font-size: 11px;
   }
+
+  .info-item-dist .info-value {
+    font-size: 13px;
+  }
+
+  .info-label {
+    font-size: 9px;
+  }
+
+  .slider-labels span {
+    font-size: 9px;
+  }
 }
 
 /* 超小屏进一步紧凑 */
 @media (max-width: 360px) {
-  .mode-tab svg {
-    display: none;
-  }
-
   .panel-body {
     padding-left: 10px;
     padding-right: 10px;
   }
 
   .panel-header {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .gps-status {
     padding-left: 10px;
     padding-right: 10px;
   }

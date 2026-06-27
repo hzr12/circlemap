@@ -43,5 +43,35 @@ const CONFIG = {
     { maxRadius: 10000, zoom: 10 },
     { maxRadius: 20000, zoom: 9 },
     { maxRadius: Infinity, zoom: 8 }
-  ]
+  ],
+
+  // 地球半径（米）
+  EARTH_RADIUS: 6371000
 };
+
+/**
+ * 计算两点之间的球面距离（Haversine 公式）
+ * @param {{lat:number,lng:number}} p1
+ * @param {{lat:number,lng:number}} p2
+ * @returns {number} 距离（米）
+ */
+function calcDistance(p1, p2) {
+  const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+  const dLng = (p2.lng - p1.lng) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+          + Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180)
+          * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return CONFIG.EARTH_RADIUS * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * 格式化距离文字
+ * @param {number} meters
+ * @returns {string}
+ */
+function formatDistance(meters) {
+  if (meters < 10) return `${Math.round(meters)}m`;
+  if (meters < 1000) return `${Math.round(meters)}m`;
+  if (meters < 10000) return `${(meters / 1000).toFixed(2)}km`;
+  return `${(meters / 1000).toFixed(1)}km`;
+}
