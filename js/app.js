@@ -173,7 +173,7 @@ class App {
       if (sel) {
         this.mapManager.updateCircleRadius(sel.id, val);
         this._updateInfo();
-        this._updateCircleList();
+        this._updateCircleList(true);
       }
     });
 
@@ -188,7 +188,7 @@ class App {
       const sel = this.mapManager.getSelectedCircle();
       if (sel) {
         this.mapManager.updateCircleRadius(sel.id, val);
-        this._updateCircleList();
+        this._updateCircleList(true);
         this._updateInfo();
       }
     });
@@ -307,7 +307,7 @@ class App {
       this.circleRadius = circle.maxRadius;
     }
     this._updateInfo();
-    this._updateCircleList();
+    this._updateCircleList(true);
   }
 
   /**
@@ -395,8 +395,8 @@ class App {
 
     this.mapManager.addCircle(this.center, this.circleRadius);
     this._updateInfo();
-    this._updateCircleList();
-    this._updateStatusBar();
+    this._updateCircleList(true);
+    this._updateStatusBar(true);
     this._saveState();
     this._showToast(`已创建同心圆，半径 ${
       this.circleRadius >= 1000
@@ -444,8 +444,8 @@ class App {
       document.getElementById('lat').value = convPos.lat.toFixed(6);
       document.getElementById('lng').value = convPos.lng.toFixed(6);
 
-      this._updateStatusBar();
-      this._updateCircleList();
+      this._updateStatusBar(true);
+      this._updateCircleList(true);
       this._updateInfo();
 
       btn.classList.add('located');
@@ -766,9 +766,12 @@ ${trkptXml}    </trkseg>
       this._updateTrailUI();
     }
 
-    // 刷新所有显示
-    this._updateStatusBar();
-    this._updateCircleList();
+    // 刷新所有显示（位移 >5m 才重算距离和重建列表，否则靠 60s 定时器兜底）
+    if (!this._lastDistPos || calcDistance(convPos, this._lastDistPos) > 5) {
+      this._lastDistPos = convPos;
+      this._updateStatusBar();
+      this._updateCircleList();
+    }
     this._updateInfo();
   }
 
@@ -794,8 +797,8 @@ ${trkptXml}    </trkseg>
       this.mapManager.setLocation(convPos);
       this._prevDistances = {}; // 重置趋势缓存
 
-      this._updateStatusBar();
-      this._updateCircleList();
+      this._updateStatusBar(true);
+      this._updateCircleList(true);
       this._updateInfo();
 
       console.log('[AutoRelocate] 重定位成功:', pos.lat.toFixed(4), pos.lng.toFixed(4));
@@ -814,8 +817,8 @@ ${trkptXml}    </trkseg>
   _clearAll() {
     this.mapManager.clearCircles();
     document.getElementById('infoArea').classList.add('hidden');
-    this._updateCircleList();
-    this._updateStatusBar();
+    this._updateCircleList(true);
+    this._updateStatusBar(true);
     this._saveState();
   }
 
@@ -907,8 +910,8 @@ ${trkptXml}    </trkseg>
           this.mapManager.selectedCircleId = data.selectedCircleId;
         }
         this._updateInfo();
-        this._updateCircleList();
-        this._updateStatusBar();
+        this._updateCircleList(true);
+        this._updateStatusBar(true);
         this.mapManager._scheduleRedraw();
         console.log('[App] 从 localStorage 恢复', data.circles.length, '个圆');
       }
@@ -922,12 +925,16 @@ ${trkptXml}    </trkseg>
   /**
    * 更新顶部 GPS 状态条
    */
-  _updateStatusBar() {
+  _updateStatusBar(force) {
     if (!this._statusEl) return;
     if (!this.myPosition) {
       this._statusEl.innerHTML = '<span class="gps-dot"></span><span class="gps-offline">⊙ 未定位，点击 GPS 按钮定位</span>';
       return;
     }
+    // 2s 节流：不强制刷新时跳过高频调用
+    const now = Date.now();
+    if (!force && this._lastStatusUpdate && now - this._lastStatusUpdate < 2000) return;
+    this._lastStatusUpdate = now;
     // 找最近圆
     const circles = this.mapManager.getCircles();
     let nearest = null;
@@ -1032,8 +1039,8 @@ ${trkptXml}    </trkseg>
       this.mapManager.setCenter(sel.center);
     }
     this._updateInfo();
-    this._updateCircleList();
-    this._updateStatusBar();
+    this._updateCircleList(true);
+    this._updateStatusBar(true);
   }
 
   /**
@@ -1042,8 +1049,8 @@ ${trkptXml}    </trkseg>
   _deleteCircle(id) {
     this.mapManager.removeCircle(id);
     this._updateInfo();
-    this._updateCircleList();
-    this._updateStatusBar();
+    this._updateCircleList(true);
+    this._updateStatusBar(true);
     this._saveState();
     // 清除已删除圆的趋势缓存
     delete this._prevDistances[id];
@@ -1078,9 +1085,14 @@ ${trkptXml}    </trkseg>
   /**
    * 渲染圆列表
    */
-  _updateCircleList() {
+  _updateCircleList(force) {
     const circles = this.mapManager.getCircles();
     const selId = this.mapManager.selectedCircleId;
+
+    // 2s 节流
+    const now = Date.now();
+    if (!force && this._lastCircleUpdate && now - this._lastCircleUpdate < 2000) return;
+    this._lastCircleUpdate = now;
 
     if (!circles.length) {
       this._circleListEl.innerHTML = `<div class="empty-state">暂无同心圆，点击「绘制圆形」添加</div>`;
@@ -1167,7 +1179,7 @@ ${trkptXml}    </trkseg>
           document.getElementById('radius-input').value = radius;
           this.mapManager.addCircle(this.center, radius);
           this._updateInfo();
-          this._updateCircleList();
+          this._updateCircleList(true);
         }
       }
     } catch (e) {
