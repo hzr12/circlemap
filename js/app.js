@@ -742,9 +742,8 @@ ${trkptXml}    </trkseg>
         console.log('[GPS] 首次定位:', pos.lat.toFixed(4), pos.lng.toFixed(4));
       }
     } else if (this._isWatching) {
-      // 持续追踪中：每次位置更新都平滑飞到当前位置
+      // 持续追踪中：只更新位置数据，不移动地图视角
       this.center = convPos;
-      this.mapManager.flyTo(convPos);
     }
 
     // —— 记录历史轨迹（每 10m 采一个点，可开关） ——
