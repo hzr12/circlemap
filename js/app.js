@@ -317,7 +317,7 @@ class App {
       if (!text || text === '--') return;
       navigator.clipboard.writeText(text).then(() => {
         const app = window.app;
-        if (app) app._showToast && app._showToast('✅ 已复制坐标');
+        if (app) Toast.show('✅ 已复制坐标');
       }).catch(() => {
         // clipboard API 可能被拒绝，降级
       });
