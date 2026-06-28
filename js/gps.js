@@ -24,6 +24,11 @@ class GPSManager {
    * @returns {Promise<{lat: number, lng: number, accuracy: number}>}
    */
   getCurrentPosition(timeout) {
+    const t = timeout || CONFIG.GPS_TIMEOUT;
+
+    // 15 秒总超时兜底（比 geolocation timeout 多 5s，防止 GPS 信号弱卡死）
+    const fallbackMs = Math.max(t + 5000, 15000);
+
     return new Promise((resolve, reject) => {
       // 检查浏览器支持
       if (!navigator.geolocation) {
@@ -31,11 +36,15 @@ class GPSManager {
         return;
       }
 
-      const t = timeout || CONFIG.GPS_TIMEOUT;
+      // 总超时兜底
+      const fallbackTimer = setTimeout(() => {
+        reject(new Error('定位请求无响应（' + (fallbackMs / 1000).toFixed(0) + ' 秒超时）'));
+      }, fallbackMs);
 
       navigator.geolocation.getCurrentPosition(
         // 成功回调
         (position) => {
+          clearTimeout(fallbackTimer);
           const pos = {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
@@ -50,6 +59,7 @@ class GPSManager {
         },
         // 失败回调
         (error) => {
+          clearTimeout(fallbackTimer);
           let message;
           switch (error.code) {
             case error.PERMISSION_DENIED:
