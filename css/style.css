@@ -1100,12 +1100,12 @@ input[type="number"] {
 /* ---------- 小屏幕专用优化（移动端重构） ---------- */
 @media (max-width: 480px) {
   .bottom-panel {
-    max-height: 50vh;
+    max-height: 38vh;
     /* 默认收起：只显示把手 + 状态条 */
   }
 
   .bottom-panel.collapsed {
-    max-height: 64px;
+    max-height: 52px;
     overflow: hidden;
   }
 
@@ -1147,21 +1147,21 @@ input[type="number"] {
   }
 
   .panel-handle {
-    padding: 14px 0 10px;
+    padding: 10px 0 6px;
   }
 
   .panel-body {
-    padding-left: 14px;
-    padding-right: 14px;
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .panel-header {
-    padding-left: 14px;
-    padding-right: 14px;
+    padding-left: 12px;
+    padding-right: 12px;
   }
 
   .panel-title {
-    font-size: 15px;
+    font-size: 14px;
   }
 
   .panel-subtitle {
@@ -1170,38 +1170,38 @@ input[type="number"] {
 
   .gps-status {
     font-size: 10px;
-    padding: 2px 14px 6px;
+    padding: 2px 12px 4px;
   }
 
   .action-row {
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
 
   .action-row .btn {
-    padding: 11px 10px;
-    font-size: 13px;
+    padding: 9px 8px;
+    font-size: 12px;
   }
 
   .mode-tab {
-    padding: 8px 6px;
+    padding: 6px 4px;
     font-size: 12px;
   }
 
   .mode-tab svg {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
   }
 
   .radius-section {
-    margin-bottom: 10px;
-  }
-
-  .radius-header {
     margin-bottom: 6px;
   }
 
+  .radius-header {
+    margin-bottom: 4px;
+  }
+
   .coord-input {
-    padding: 9px 10px;
+    padding: 7px 8px;
     font-size: 13px;
   }
 
@@ -1214,30 +1214,30 @@ input[type="number"] {
   .click-hint {
     font-size: 11px;
     padding: 8px 10px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
 
   .parse-section {
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
   
   .input-group.visible {
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
   
   .trail-section {
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     border-top: 1px solid rgba(255,255,255,0.05);
-    padding-top: 12px;
+    padding-top: 8px;
   }
   
   .btn-trail {
-    padding: 9px 12px;
+    padding: 8px 10px;
     font-size: 12px;
   }
   
   .btn-sm {
-    padding: 9px 8px;
+    padding: 7px 7px;
     font-size: 11px;
   }
   
@@ -1246,33 +1246,33 @@ input[type="number"] {
   }
   
   .fix-list-section {
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     border-top: 1px solid rgba(255,255,255,0.05);
-    padding-top: 12px;
+    padding-top: 8px;
   }
   
   .fix-item {
-    padding: 5px 8px;
+    padding: 4px 6px;
     font-size: 10px;
-    gap: 6px;
+    gap: 5px;
   }
   
   .fix-time {
-    min-width: 50px;
+    min-width: 45px;
   }
   
   .fix-accuracy {
-    min-width: 34px;
+    min-width: 32px;
   }
   
   .circle-list-section {
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     border-top: 1px solid rgba(255,255,255,0.05);
-    padding-top: 12px;
+    padding-top: 8px;
   }
 
   .circle-item {
-    padding: 7px 8px;
+    padding: 5px 6px;
   }
 
   .circle-idx {
@@ -1299,7 +1299,7 @@ input[type="number"] {
   }
 
   .info-item {
-    padding: 8px 6px;
+    padding: 6px 5px;
   }
 
   .info-value {
