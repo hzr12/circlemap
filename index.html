@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>鬼抓人——地图雷达</title>
+  <title>鬼抓人——地图雷�?/title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -13,9 +13,9 @@
     <canvas id="circle-canvas"></canvas>
   </div>
 
-  <!-- 浮动控制按钮组 -->
+  <!-- 浮动控制按钮�?-->
   <div class="floating-buttons">
-    <button id="gps-btn" class="fab-btn" title="定位到我的位置" aria-label="定位">
+    <button id="gps-btn" class="fab-btn" title="定位到我的位�? aria-label="定位">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="10" r="3"/>
         <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
@@ -33,11 +33,11 @@
     <!-- GPS 状态条 -->
     <div class="gps-status" id="gps-status">
       <span class="gps-dot"></span>
-      <span class="gps-offline">⊙ 未定位，点击 GPS 按钮定位</span>
+      <span class="gps-offline">�?未定位，点击 GPS 按钮定位</span>
     </div>
 
     <div class="panel-header">
-      <h1 class="panel-title">鬼抓人——地图雷达</h1>
+      <h1 class="panel-title">鬼抓人——地图雷�?/h1>
     </div>
 
     <div class="panel-body">
@@ -59,7 +59,7 @@
         </button>
       </div>
 
-      <!-- 坐标输入区 -->
+      <!-- 坐标输入�?-->
       <div class="input-section input-group" id="inputGroup">
         <div class="coord-row">
           <div class="coord-field">
@@ -83,14 +83,14 @@
           <path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13s-7-8-7-13a7 7 0 0 1 14 0Z"/>
           <circle cx="12" cy="9" r="2.5"/>
         </svg>
-        点击地图上的任意位置选择中心点
+        点击地图上的任意位置选择中心�?
       </div>
 
       <!-- 智能坐标解析 -->
       <div class="parse-section">
         <div class="parse-row">
           <div class="parse-input-wrap">
-            <input type="text" id="parse-input" class="parse-input" placeholder="粘贴坐标，如：23.1291, 113.2644" enterkeyhint="done">
+            <input type="text" id="parse-input" class="parse-input" placeholder="粘贴坐标，如�?3.1291, 113.2644" enterkeyhint="done">
           </div>
         </div>
       </div>
@@ -101,7 +101,7 @@
           <label class="field-label">半径</label>
           <div class="radius-value-wrap">
             <input type="number" id="radius-input" class="radius-input" value="5000" min="1" max="50000" inputmode="numeric">
-            <span class="radius-unit">米</span>
+            <span class="radius-unit">�?/span>
           </div>
         </div>
         <div class="slider-wrap">
@@ -143,34 +143,34 @@
         </div>
         <div class="trail-controls">
           <button id="trail-record-btn" class="btn btn-trail">
-            <span class="trail-dot"></span> 开始记录
+            <span class="trail-dot"></span> 开始记�?
           </button>
           <button id="trail-clear-btn" class="btn btn-secondary btn-sm" disabled>清除</button>
           <button id="trail-export-btn" class="btn btn-secondary btn-sm" disabled>导出 GPX</button>
         </div>
       </div>
 
-      <!-- 圆列表 -->
+      <!-- 圆列�?-->
       <div class="circle-list-section">
         <div class="circle-list-header">
-          <span class="field-label">已绘制 (<span id="circle-count">0</span>)</span>
+          <span class="field-label">已绘�?(<span id="circle-count">0</span>)</span>
         </div>
         <div class="circle-list" id="circle-list">
-          <div class="empty-state">暂无同心圆，点击「绘制圆形」添加</div>
+          <div class="empty-state">暂无同心圆，点击「绘制圆形」添�?/div>
         </div>
       </div>
 
-      <!-- 最近定位 -->
+      <!-- 最近定�?-->
       <div class="fix-list-section">
         <div class="fix-list-header">
-          <span class="field-label">最近定位 (<span id="fix-count">0</span>)</span>
+          <span class="field-label">最近定�?(<span id="fix-count">0</span>)</span>
         </div>
         <div class="fix-list" id="fix-list">
           <div class="empty-state">暂无定位数据</div>
         </div>
       </div>
 
-      <!-- 信息展示区 -->
+      <!-- 信息展示�?-->
       <div class="info-area hidden" id="infoArea">
         <div class="info-divider"></div>
         <div class="info-grid">
@@ -187,7 +187,7 @@
             <span class="info-value accent" id="info-area">--</span>
           </div>
           <div class="info-item">
-            <span class="info-label">同心圆</span>
+            <span class="info-label">同心�?/span>
             <span class="info-value" id="info-rings">--</span>
           </div>
           <div class="info-item info-item-dist">
@@ -203,9 +203,9 @@
   <script charset="utf-8" src="https://map.qq.com/api/js?v=2.exp&key=OB4BZ-D4W3U-B7VVO-4PJWW-6TKDJ-WPB77"></script>
 
   <!-- 应用脚本 -->
-  <script src="js/config.js?t=20260628v8"></script>
-  <script src="js/map.js?t=20260628v8"></script>
-  <script src="js/gps.js?t=20260628v8"></script>
-  <script src="js/app.js?t=20260628v8"></script>
+  <script src="js/config.js?t=20260628v9"></script>
+  <script src="js/map.js?t=20260628v9"></script>
+  <script src="js/gps.js?t=20260628v9"></script>
+  <script src="js/app.js?t=20260628v9"></script>
 </body>
 </html>
