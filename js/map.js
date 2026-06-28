@@ -154,8 +154,20 @@ class MapManager {
    * ================================================================ */
 
   _scheduleRedraw() {
+    const minInterval = 1000 / 30; // ~33ms → 30fps 限频
+
     if (this._rafId) cancelAnimationFrame(this._rafId);
-    this._rafId = requestAnimationFrame(() => this._redraw());
+
+    const now = performance.now();
+    if (now - (this._lastRedrawTime || 0) < minInterval) {
+      return; // 距离上次绘制不足 33ms，跳过（下一个事件触发时会继续判断）
+    }
+
+    this._rafId = requestAnimationFrame(() => {
+      this._redraw();
+      this._lastRedrawTime = performance.now();
+      this._rafId = null;
+    });
   }
 
   /* ================================================================
