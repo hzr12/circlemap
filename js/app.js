@@ -29,7 +29,6 @@ class App {
     this._recentFixes = [];           // 最近定位记录（最多 10 条）
     this._lastRecordedFix = null;     // 上次记录的定位
     this.trail = new Trail();         // #18 轨迹管理独立模块
-    this._intervalId = null;          // #5 定时器 ID
     this._followMode = false;         // #12 地图跟随模式
     this._isManualPosition = false;   // #13 是否手动设置的位置
   }
