@@ -1217,17 +1217,20 @@ class App {
 
 /* ============= 启动 ============= */
 
-// DOM 就绪后启动
-document.addEventListener('DOMContentLoaded', () => {
+let _appInitialized = false;
+
+function _bootApp() {
+  if (_appInitialized) return;
+  _appInitialized = true;
   const app = new App();
   app.init();
   // 暴露到全局便于调试
   window.app = app;
-});
+}
 
-// 如果 DOM 已经加载，直接启动
+// DOM 就绪后启动（脚本在 </body> 前，readyState 为 interactive，两个路径可能都执行）
+document.addEventListener('DOMContentLoaded', _bootApp);
+
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  const app = new App();
-  app.init();
-  window.app = app;
+  _bootApp();
 }
