@@ -12,3 +12,7 @@ Thumbs.db
 # Python http server
 __pycache__/
 *.pyc
+
+# changelog
+CHANGELOG.md
+AGENTS.md
