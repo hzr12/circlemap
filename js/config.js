@@ -124,8 +124,9 @@ function radiusToSlider(radius) {
  * @returns {string}
  */
 function formatDistance(meters) {
-  if (meters < 10) return `${Math.round(meters)}m`;
-  if (meters < 1000) return `${Math.round(meters)}m`;
-  if (meters < 10000) return `${(meters / 1000).toFixed(2)}km`;
-  return `${(meters / 1000).toFixed(1)}km`;
+  const val = Math.round(meters);
+  if (val < 10) return `${val}m`;
+  if (val < 1000) return `${val}m`;
+  if (val < 10000) return `${(val / 1000).toFixed(2)}km`;
+  return `${(val / 1000).toFixed(1)}km`;
 }
