@@ -31,6 +31,7 @@ class App {
     this.trail = new Trail();         // #18 轨迹管理独立模块
     this._followMode = false;         // #12 地图跟随模式
     this._isManualPosition = false;   // #13 是否手动设置的位置
+    this._manualCenter = false;       // 用户是否通过点击/输入手动设过中心点
     this._dirty = false;              // 是否有未持久化的状态变更
     this._intervalId = null;          // 定时刷新 interval ID
     this._resizeHandler = null;       // 地图 resize 事件处理器引用
@@ -362,6 +363,7 @@ class App {
     }
     this._updateInfo();
     this._updateCircleList(true);
+    this._manualCenter = true; // 用户点击/选中标记 → 不再被 GPS 覆盖
     this._dirty = true;
   }
 
@@ -395,8 +397,9 @@ class App {
       for (const p of parts) {
         const n = parseFloat(p);
         if (isNaN(n)) continue;
-        if (/[北ns]/i.test(p)) lat = n;
-        if (/[东ew]/i.test(p)) lng = n;
+        // 只匹配明确的 N/S/E/W 方向标记，防止字母 s 误匹配 "East" 等单词
+        if (/(?:北|南|(?:^|[°\s])[nNsS](?:$|[°\s])|[nN]orth|[sS]outh)/i.test(p)) lat = n;
+        if (/(?:东|西|(?:^|[°\s])[eEwW](?:$|[°\s])|[eE]ast|[wW]est)/i.test(p)) lng = n;
       }
       if (lat != null && lng != null) return { lat, lng };
     }
@@ -441,6 +444,7 @@ class App {
         lng >= -180 && lng <= 180) {
       this.center = { lat, lng };
       this.mapManager.setCenter(this.center);
+      this._manualCenter = true; // 手动输入坐标 → 不再被 GPS 覆盖
       this._dirty = true;
     }
   }
@@ -490,6 +494,13 @@ class App {
       Toast.show('请先选择中心点（点击地图或输入坐标）');
       return;
     }
+    // 直接从输入框读取半径值（绕过 change 事件不触发问题）
+    const inputVal = parseInt(this._radiusInput.value, 10);
+    const radius = (!isNaN(inputVal) && inputVal >= CONFIG.MIN_RADIUS && inputVal <= CONFIG.MAX_RADIUS)
+      ? inputVal
+      : this.circleRadius;
+    this.circleRadius = radius;
+
     if (this.circleRadius <= 0) {
       Toast.show('请输入有效的半径');
       return;
@@ -574,6 +585,7 @@ class App {
 
     this._isWatching = true;
     this._firstFix = true;
+    this._manualCenter = false; // 重新开启 GPS 追踪 → 取消手动锁定
 
     this._gpsBtn.classList.add('watching');
     this._gpsBtn.title = '正在持续追踪位置';
@@ -776,7 +788,10 @@ class App {
         Toast.show(`✅ 定位成功（精度 ±${pos.accuracy.toFixed(0)} 米）`);
       }
     } else if (this._isWatching) {
-      this.center = convPos;
+      // 用户手动选过中心点 → 不覆盖 center（GPS 只更新自身位置标记）
+      if (!this._manualCenter) {
+        this.center = convPos;
+      }
       // 同步到输入框（保持输入坐标与当前位置一致）
       this._latInput.value = convPos.lat.toFixed(6);
       this._lngInput.value = convPos.lng.toFixed(6);
