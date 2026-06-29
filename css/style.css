@@ -393,6 +393,34 @@ input[type="number"] {
   vertical-align: middle;
 }
 
+/* #15 — 手动定位标签 */
+.tag-manual {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: #FFA502;
+  background: rgba(255, 165, 2, 0.12);
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* #12 — 状态条跟随模式标签 */
+.gps-follow {
+  color: var(--accent-1);
+  font-weight: 600;
+  font-size: 10px;
+}
+
+/* #15 — 状态条手动定位标签 */
+.gps-manual {
+  color: #FFA502;
+  font-weight: 600;
+  font-size: 10px;
+}
+
 /* 面板主体 */
 .panel-body {
   padding: 0 20px calc(16px + var(--safe-bottom));
@@ -545,6 +573,27 @@ input[type="number"] {
 .parse-input::placeholder {
   color: var(--text-tertiary);
   font-family: var(--font-sans);
+}
+
+/* #14 — 设为我当前位置按钮 */
+.btn-setpos {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-2);
+  background: rgba(0, 163, 255, 0.08);
+  border: 1px solid rgba(0, 163, 255, 0.18);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-setpos:active {
+  background: rgba(0, 163, 255, 0.16);
+  transform: scale(0.97);
 }
 
 /* ---------- 半径设置 ---------- */
@@ -861,9 +910,19 @@ input[type="number"] {
   cursor: pointer;
 }
 
-.circle-item:hover .circle-edit,
-.circle-item:hover .circle-del {
-  opacity: 1;
+/* #10 — 触屏设备默认显示编辑/删除按钮 */
+@media (hover: hover) {
+  .circle-item:hover .circle-edit,
+  .circle-item:hover .circle-del {
+    opacity: 1;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .circle-edit,
+  .circle-del {
+    opacity: 1;
+  }
 }
 
 .circle-edit:hover {
@@ -1410,7 +1469,7 @@ input[type="number"] {
   color: var(--text-primary);
   z-index: 9999;
   white-space: nowrap;
-  max-width: 85vw;
+  max-width: calc(100vw - 80px); /* #9 避开右上 FAB 按钮 */
   overflow: hidden;
   text-overflow: ellipsis;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);

@@ -68,6 +68,30 @@ function calcDistance(p1, p2) {
 }
 
 /**
+ * 对数半径映射 — 滑块值 → 实际半径（#11）
+ * 让常用小半径区间占据更多滑块行程
+ * @param {number} sliderVal 0-1 归一化滑块位置
+ * @returns {number} 半径（米）
+ */
+function sliderToRadius(sliderVal) {
+  const minR = CONFIG.MIN_RADIUS;
+  const maxR = CONFIG.MAX_RADIUS;
+  return Math.round(minR + (maxR - minR) * Math.log(1 + 9 * sliderVal) / Math.log(10));
+}
+
+/**
+ * 对数半径映射 — 实际半径 → 滑块归一化值（#11）
+ * @param {number} radius 半径（米）
+ * @returns {number} 0-1 归一化值
+ */
+function radiusToSlider(radius) {
+  const minR = CONFIG.MIN_RADIUS;
+  const maxR = CONFIG.MAX_RADIUS;
+  const t = (Math.max(radius, minR) - minR) / (maxR - minR);
+  return Math.min(1, Math.max(0, (Math.exp(t * Math.log(10)) - 1) / 9));
+}
+
+/**
  * 格式化距离文字
  * @param {number} meters
  * @returns {string}

@@ -15,17 +15,19 @@ class MapManager {
     this.mode = 'click';
     this.circles = [];          // {id, center:{lat,lng}, maxRadius, interval}
     this.selectedCircleId = null;
-    this._idCounter = 1;
+    this._idCounter = Date.now(); // #3 时间戳起始 + 递增，避免碰撞
     this.PICK_THRESHOLD = 22;   // 像素距离阈值
 
     this._rafId = null;
     this._syncCenter = null;    // 地图实际显示中心（我们追踪，不依赖 getCenter）
 
     this.locationMarker = null; // 我的位置标记（区别于圆心标识）
+    this.accuracyCircle = null; // #17 定位精度圆环
     this.trailPolyline = null;  // 历史轨迹线
 
     // 回调钩子
     this.onCenterChange = null;
+    this.onLongPress = null; // #13 长按回调
   }
 
   /**
@@ -66,6 +68,14 @@ class MapManager {
       }
 
       this.setCenter({ lat: event.latLng.getLat(), lng: event.latLng.getLng() });
+    });
+
+    // #13 — 长按地图触发回调（用于手动设位置或快速创建圆）
+    qq.maps.event.addListener(this.map, 'longpress', (event) => {
+      if (!event.latLng) return;
+      if (this.onLongPress) {
+        this.onLongPress({ lat: event.latLng.getLat(), lng: event.latLng.getLng() });
+      }
     });
 
     // 地图变化 → 重绘 Circle Canvas
@@ -154,8 +164,25 @@ class MapManager {
    * ================================================================ */
 
   _scheduleRedraw() {
+    const minInterval = 1000 / 30; // ~33ms → 30fps 限频
+
     if (this._rafId) cancelAnimationFrame(this._rafId);
-    this._rafId = requestAnimationFrame(() => this._redraw());
+
+    this._rafId = requestAnimationFrame(() => {
+      // #1 距上次绘制不足 33ms → 再排一次，保证请求不被丢弃
+      const now = performance.now();
+      if (now - (this._lastRedrawTime || 0) < minInterval) {
+        this._rafId = requestAnimationFrame(() => {
+          this._redraw();
+          this._lastRedrawTime = performance.now();
+          this._rafId = null;
+        });
+        return;
+      }
+      this._redraw();
+      this._lastRedrawTime = performance.now();
+      this._rafId = null;
+    });
   }
 
   /* ================================================================
@@ -166,10 +193,11 @@ class MapManager {
     const dpr = window.devicePixelRatio || 1;
     const ctx = this.ctx;
     const parent = this.canvas.parentElement;
+    const w = parent.offsetWidth;
+    const h = parent.offsetHeight;
 
-    this._resizeCanvas();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, parent.offsetWidth, parent.offsetHeight);
+    ctx.clearRect(0, 0, w, h);
 
     for (const c of this.circles) {
       this._drawOneCircle(ctx, c);
@@ -335,7 +363,7 @@ class MapManager {
    * @returns {number} 新圆的 id
    */
   addCircle(center, maxRadius, interval) {
-    const id = Date.now();
+    const id = this._idCounter++; // #3 递增计数器，避免 Date.now() 碰撞
     this.circles.push({
       id,
       center: { lat: center.lat, lng: center.lng },
@@ -536,8 +564,9 @@ class MapManager {
   /**
    * 在地图上显示我的位置标记
    * @param {{lat:number, lng:number}} center
+   * @param {number} [accuracy] 定位精度（米），传入则同时绘制精度环 (#17)
    */
-  setLocation(center) {
+  setLocation(center, accuracy) {
     const latLng = new qq.maps.LatLng(center.lat, center.lng);
 
     if (this.locationMarker) {
@@ -548,6 +577,41 @@ class MapManager {
         map: this.map,
         draggable: false,
         icon: this._createLocationIcon()
+      });
+    }
+
+    // #17 更新精度环
+    this._updateAccuracyCircle(latLng, accuracy);
+  }
+
+  /**
+   * 绘制/更新定位精度环
+   * #17 — 在地图上用半透明圆表示定位可信范围
+   * @param {qq.maps.LatLng} latLng 中心坐标
+   * @param {number} [accuracy] 精度（米），不传或 NaN 则清除精度环
+   */
+  _updateAccuracyCircle(latLng, accuracy) {
+    if (!this.map) return;
+    if (accuracy == null || isNaN(accuracy) || accuracy <= 0) {
+      if (this.accuracyCircle) {
+        this.accuracyCircle.setMap(null);
+        this.accuracyCircle = null;
+      }
+      return;
+    }
+
+    if (this.accuracyCircle) {
+      this.accuracyCircle.setCenter(latLng);
+      this.accuracyCircle.setRadius(accuracy);
+    } else {
+      this.accuracyCircle = new qq.maps.Circle({
+        map: this.map,
+        center: latLng,
+        radius: accuracy,
+        fillColor: new qq.maps.Color(0, 136, 255, 0.08),
+        strokeColor: new qq.maps.Color(0, 136, 255, 0.15),
+        strokeWeight: 1,
+        editable: false
       });
     }
   }

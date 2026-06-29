@@ -12,7 +12,7 @@ class App {
     this.circleRadius = CONFIG.DEFAULT_RADIUS;
     this.center = null;          // 当前标记位置
     this.myPosition = null;      // 我的位置（GCJ-02，由 GPS 定位设置）
-    this.myPositionTime = null;  // 上次定位成功时间戳（毫秒）
+    this.myPositionTime = null;  // 上次定位成功时间戳（毫秒，用于过期检测）
     this.mode = 'click';
     this._circleListEl = null;   // 圆列表 DOM
     this._statusEl = null;       // GPS 状态条
@@ -22,14 +22,15 @@ class App {
     this._relocating = false;    // 是否正在自动重定位
     this._lastRelocateAttempt = 0; // 上次自动重定位时间戳
     this._lastRawPos = null;     // 上次原始 WGS84 坐标，用于移动距离判断
+    this._lastDistPos = null;    // 上次刷新距离的位置，用于 5m 位移节流
     this._panelCollapsed = window.innerWidth <= 480; // 移动端面板默认收起
     this._watchingBeforeHide = false; // 切后台前是否在追踪
     this._restoringView = false;      // 从后台恢复时不飞地图
-    this._trailPositions = [];        // 历史轨迹点（GCJ-02）
-    this._lastTrailPos = null;        // 上次记录的轨迹位置
     this._recentFixes = [];           // 最近定位记录（最多 10 条）
     this._lastRecordedFix = null;     // 上次记录的定位
-    this._isTrailRecording = false;   // 轨迹记录开关
+    this.trail = new Trail();         // #18 轨迹管理独立模块
+    this._followMode = false;         // #12 地图跟随模式
+    this._isManualPosition = false;   // #13 是否手动设置的位置
   }
 
   /**
@@ -42,13 +43,21 @@ class App {
     // 注册中心点变化回调（含选中圆圈回调）
     this.mapManager.onCenterChange = (center, circle) => this._onCenterChanged(center, circle);
 
+    // #13 — 长按地图：GPS 过期时设为手动位置，否则快速创建圆
+    this.mapManager.onLongPress = (pos) => this._onMapLongPress(pos);
+
     // 初始化 UI
     this._setupUI();
 
-    // 移动端面板默认收起
+    // 移动端面板默认收起 + 响应横竖屏旋转（#4）
     if (this._panelCollapsed) {
       document.getElementById('bottomPanel').classList.add('collapsed');
     }
+    this._panelMediaQuery = window.matchMedia('(max-width: 480px)');
+    this._panelMediaQuery.addEventListener('change', (e) => {
+      this._panelCollapsed = e.matches;
+      document.getElementById('bottomPanel').classList.toggle('collapsed', e.matches);
+    });
 
     // 读取 URL 参数
     this._checkUrlParams();
@@ -62,27 +71,36 @@ class App {
     // 进入页面后自动启动持续 GPS 追踪
     this._startWatching();
 
-    // 页面可见性变化：后台停 GPS，前台恢复
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        if (this._isWatching) {
-          this._watchingBeforeHide = true;
-          this._stopWatching();
-        }
-      } else if (this._watchingBeforeHide) {
+    // 页面可见性变化：后台停 GPS，前台恢复（#6 加 pagehide 兜底 iOS）
+    const handlePageHide = () => {
+      if (this._isWatching) {
+        this._watchingBeforeHide = true;
+        this._stopWatching();
+      }
+    };
+    const handlePageShow = () => {
+      if (this._watchingBeforeHide) {
         this._watchingBeforeHide = false;
         this._restoringView = true;
         this._startWatching();
       }
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        handlePageHide();
+      } else {
+        handlePageShow();
+      }
     });
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('pageshow', handlePageShow);
 
     // 每分钟刷新状态 & 持久化 & 自动重定位
     setInterval(() => {
       if (this.myPosition) {
-        this._updateStatusBar();
+        this._updateStatusBar(true);
         this._updateInfo();
         this._updateCircleList();
-        // 定位已过期且未在持续追踪 → 自动尝试重定位一次
         if (this._isPositionStale() && !this._isWatching) {
           this._autoRelocate();
         }
@@ -124,7 +142,7 @@ class App {
       latInput.value = parsed.lat.toFixed(6);
       lngInput.value = parsed.lng.toFixed(6);
       this._onCoordInput();
-      this._showToast('✅ 已识别坐标');
+      Toast.show('✅ 已识别坐标');
     };
     latInput.addEventListener('paste', handlePaste);
     lngInput.addEventListener('paste', handlePaste);
@@ -142,7 +160,7 @@ class App {
         latInput.value = parsed.lat.toFixed(6);
         lngInput.value = parsed.lng.toFixed(6);
         this._onCoordInput();
-        this._showToast('✅ 已识别坐标');
+        Toast.show('✅ 已识别坐标');
       }, 300);
     });
     // 回车直接解析
@@ -156,24 +174,34 @@ class App {
         latInput.value = parsed.lat.toFixed(6);
         lngInput.value = parsed.lng.toFixed(6);
         this._onCoordInput();
-        this._showToast('✅ 已识别坐标');
+        Toast.show('✅ 已识别坐标');
       }
     });
 
-    // —— 半径滑块 & 数字输入双向绑定 ——
+    // —— 半径滑块 & 数字输入双向绑定（#11 对数映射） ——
     const radiusSlider = document.getElementById('radius-slider');
     const radiusInput = document.getElementById('radius-input');
 
+    const sliderToVal = (sliderPos) => {
+      const v = sliderToRadius(sliderPos / (radiusSlider.max - radiusSlider.min));
+      radiusInput.value = v;
+      this.circleRadius = v;
+      return v;
+    };
+    const valToSlider = (v) => {
+      const pos = Math.round(radiusToSlider(v) * (radiusSlider.max - radiusSlider.min));
+      radiusSlider.value = pos;
+      radiusInput.value = v;
+      this.circleRadius = v;
+    };
+
     radiusSlider.addEventListener('input', () => {
-      const val = parseInt(radiusSlider.value, 10);
-      radiusInput.value = val;
-      this.circleRadius = val;
-      // 若有选中圆，实时更新其半径
+      const val = sliderToVal(parseInt(radiusSlider.value, 10));
       const sel = this.mapManager.getSelectedCircle();
       if (sel) {
         this.mapManager.updateCircleRadius(sel.id, val);
         this._updateInfo();
-        this._updateCircleList();
+        this._updateCircleList(true);
       }
     });
 
@@ -181,16 +209,25 @@ class App {
       let val = parseInt(radiusInput.value, 10);
       if (isNaN(val) || val < CONFIG.MIN_RADIUS) val = CONFIG.MIN_RADIUS;
       if (val > CONFIG.MAX_RADIUS) val = CONFIG.MAX_RADIUS;
-      radiusInput.value = val;
-      radiusSlider.value = val;
-      this.circleRadius = val;
-      // 若有选中圆，更新其半径
+      valToSlider(val);
       const sel = this.mapManager.getSelectedCircle();
       if (sel) {
         this.mapManager.updateCircleRadius(sel.id, val);
-        this._updateCircleList();
+        this._updateCircleList(true);
         this._updateInfo();
       }
+    });
+
+    // —— #14 设为我当前位置按钮 ——
+    document.getElementById('set-mypos-btn').addEventListener('click', () => {
+      const lat = parseFloat(document.getElementById('lat').value);
+      const lng = parseFloat(document.getElementById('lng').value);
+      if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        Toast.show('⚠️ 请输入有效的坐标');
+        return;
+      }
+      this._setManualPosition({ lat, lng });
+      Toast.show('📍 已设为我当前位置');
     });
 
     // —— 绘制按钮 ——
@@ -204,8 +241,10 @@ class App {
     document.getElementById('trail-clear-btn').addEventListener('click', () => this._clearTrail());
     document.getElementById('trail-export-btn').addEventListener('click', () => this._exportGpx());
 
-    // —— GPS 状态条缓存 ——
+    // —— GPS 状态条缓存 + #12 点击切换跟随模式 ——
     this._statusEl = document.getElementById('gps-status');
+    this._statusEl.addEventListener('click', () => this._toggleFollowMode());
+    this._statusEl.style.cursor = 'pointer';
 
     // —— GPS 按钮：短按单次定位，长按切换持续追踪 ——
     const gpsBtn = document.getElementById('gps-btn');
@@ -257,7 +296,7 @@ class App {
       if (!text || text === '--') return;
       navigator.clipboard.writeText(text).then(() => {
         const app = window.app;
-        if (app) app._showToast('✅ 已复制坐标');
+        if (app) Toast.show('✅ 已复制坐标');
       }).catch(() => {
         // clipboard API 可能被拒绝，降级
       });
@@ -301,13 +340,14 @@ class App {
     document.getElementById('lng').value = center.lng.toFixed(6);
 
     if (circle) {
-      // 通过点击圆心选中 → 更新半径滑块和信息面板
-      document.getElementById('radius-slider').value = circle.maxRadius;
+      // 通过点击圆心选中 → 更新半径滑块和信息面板（#11 对数映射）
+      const slider = document.getElementById('radius-slider');
+      slider.value = Math.round(radiusToSlider(circle.maxRadius) * (slider.max - slider.min));
       document.getElementById('radius-input').value = circle.maxRadius;
       this.circleRadius = circle.maxRadius;
     }
     this._updateInfo();
-    this._updateCircleList();
+    this._updateCircleList(true);
   }
 
   /**
@@ -318,6 +358,7 @@ class App {
    *   "lat 23.1291 lng 113.2644"   → 带标签
    *   "纬度:23.1291 经度:113.2644" → 中文标签
    *   "39.9°N 116.4°E"             → 度分秒简写
+   *   "N 39.9 E 116.4"             → 前缀格式（#8）
    * @param {string} text
    * @returns {{lat:number,lng:number}|null}
    */
@@ -327,9 +368,9 @@ class App {
     const nums = text.match(/-?\d+\.?\d*/g);
     if (!nums || nums.length < 2) return null;
 
-    // 判断是否带 N/S/E/W 方向标识
-    const hasNS = /[北北ns]/i.test(text);
-    const hasEW = /[东东ew]/i.test(text);
+    // 判断是否带 N/S/E/W 方向标识（#8 修正重复字符）
+    const hasNS = /[北n]|north/i.test(text);
+    const hasEW = /[东e]|east/i.test(text);
 
     // 根据上下文确定 lat/lng
     if (hasNS && hasEW) {
@@ -357,6 +398,14 @@ class App {
       if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
     }
 
+    // 方向前缀格式："N 39.9 E 116.4" 或 "N39.9 E116.4"（#8）
+    const prefixMatch = text.match(/^[NnSs]\s*([\d.]+)\s*[EeWw]\s*([\d.]+)/);
+    if (prefixMatch) {
+      const lat = parseFloat(prefixMatch[1]);
+      const lng = parseFloat(prefixMatch[2]);
+      if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+    }
+
     // 默认：取前两个数字作 lat, lng
     const lat = parseFloat(nums[0]);
     const lng = parseFloat(nums[1]);
@@ -381,24 +430,59 @@ class App {
   }
 
   /**
+   * #13 — 长按地图回调
+   * GPS 过期/手动模式时设为当前位置；否则快速创建圆
+   */
+  _onMapLongPress(pos) {
+    if (!pos) return;
+    if (this._isPositionStale() || this._isManualPosition) {
+      this._setManualPosition(pos);
+      Toast.show('📍 已设为当前位置（手动）');
+    } else {
+      // 直接以当前半径创建圆
+      if (!this.center) {
+        this.center = pos;
+        this.mapManager.setCenter(pos);
+      }
+      this._drawCircle();
+    }
+  }
+
+  /**
+   * #13 — 手动设置"我的位置"
+   * @param {{lat:number,lng:number}} pos
+   */
+  _setManualPosition(pos) {
+    this.myPosition = pos;
+    this.myPositionTime = Date.now();
+    this._isManualPosition = true;
+    this._prevDistances = {};
+    this.mapManager.setLocation(pos, 10); // 手动定位默认精度 10m
+    this._updateStatusBar(true);
+    this._updateCircleList(true);
+    this._updateInfo();
+    this._saveState();
+  }
+
+  /**
    * 添加一个同心圆
    */
   _drawCircle() {
     if (!this.center) {
-      this._showToast('请先选择中心点（点击地图或输入坐标）');
+      Toast.show('请先选择中心点（点击地图或输入坐标）');
       return;
     }
     if (this.circleRadius <= 0) {
-      this._showToast('请输入有效的半径');
+      Toast.show('请输入有效的半径');
       return;
     }
 
     this.mapManager.addCircle(this.center, this.circleRadius);
     this._updateInfo();
-    this._updateCircleList();
-    this._updateStatusBar();
+    this._updateCircleList(true);
+    this._updateStatusBar(true);
     this._saveState();
-    this._showToast(`已创建同心圆，半径 ${
+    Toast.show(`已创建同心圆，半径 ${
       this.circleRadius >= 1000
         ? (this.circleRadius / 1000).toFixed(1) + ' km'
         : this.circleRadius + ' m'
@@ -435,25 +519,26 @@ class App {
       this.center = convPos;
       this.myPosition = convPos;
       this.myPositionTime = Date.now();
+      this._isManualPosition = false; // #13 GPS 定位覆盖手动
       this._recordFix(pos, convPos);
 
       this.mapManager.setCenter(convPos);
-      this.mapManager.setLocation(convPos);
+      this.mapManager.setLocation(convPos, pos.accuracy); // #17 精度环
       this.mapManager.flyTo(convPos);
 
       document.getElementById('lat').value = convPos.lat.toFixed(6);
       document.getElementById('lng').value = convPos.lng.toFixed(6);
 
-      this._updateStatusBar();
-      this._updateCircleList();
+      this._updateStatusBar(true);
+      this._updateCircleList(true);
       this._updateInfo();
 
       btn.classList.add('located');
       setTimeout(() => btn.classList.remove('located'), 3000);
 
-      this._showToast(`✅ 定位成功（精度 ±${pos.accuracy.toFixed(0)} 米）`);
+      Toast.show(`✅ 定位成功（精度 ±${pos.accuracy.toFixed(0)} 米）`);
     } catch (err) {
-      this._showToast('❌ ' + err.message);
+      Toast.show('❌ ' + err.message);
       btn.classList.remove('located');
     } finally {
       btn.classList.remove('loading');
@@ -477,11 +562,11 @@ class App {
     this.gpsManager.onPositionChange = (pos) => this._processPosition(pos);
     this.gpsManager.onError = (err) => {
       console.warn('[GPS] 追踪出错:', err.message);
-      this._showToast('⚠️ GPS 追踪异常：' + err.message);
+      Toast.show('⚠️ GPS 追踪异常：' + err.message);
     };
     this.gpsManager.startWatching();
 
-    this._showToast('📍 持续追踪已开启');
+    Toast.show('📍 持续追踪已开启');
   }
 
   /**
@@ -498,121 +583,55 @@ class App {
     btn.classList.remove('watching');
     btn.title = '定位到我的位置';
 
-    this._showToast('⏹ 持续追踪已关闭');
+    Toast.show('⏹ 持续追踪已关闭');
   }
 
   /**
    * 清除历史轨迹
    */
   _clearTrail() {
-    this._trailPositions = [];
-    this._lastTrailPos = null;
+    this.trail.clear();
     this.mapManager.clearTrail();
     this._updateTrailUI();
-    this._showToast('🗑 轨迹已清除');
+    Toast.show('🗑 轨迹已清除');
   }
 
   /**
    * 切换轨迹记录状态
    */
   _toggleTrailRecording() {
-    if (this._isTrailRecording) {
-      this._isTrailRecording = false;
-      this._showToast('⏹ 轨迹记录已停止');
+    if (this.trail.isRecording) {
+      this.trail.stop();
+      Toast.show('⏹ 轨迹记录已停止');
     } else {
-      // 开始新记录前清空旧轨迹
-      this._trailPositions = [];
-      this._lastTrailPos = null;
+      this.trail.start();
       this.mapManager.clearTrail();
-      this._isTrailRecording = true;
-      this._showToast('⏺ 轨迹记录已开始');
+      Toast.show('⏺ 轨迹记录已开始');
     }
     this._updateTrailUI();
   }
 
   /**
-   * 导出 GPX 文件
+   * 导出 GPX 文件（#18 — 委托给 GpxExport 模块，含#7 schema修复）
    */
   _exportGpx() {
-    if (this._trailPositions.length < 2) {
-      this._showToast('⚠️ 轨迹点太少，无法导出（至少需要 2 个点）');
+    const trajectories = this.trail.positions;
+    if (trajectories.length < 2) {
+      Toast.show('⚠️ 轨迹点太少，无法导出（至少需要 2 个点）');
       return;
     }
-
-    const pts = this._trailPositions;
-    let trkptXml = '';
-    for (let i = 0; i < pts.length; i++) {
-      const pt = pts[i];
-      const lat = typeof pt.wgsLat === 'number' ? pt.wgsLat.toFixed(6) : pt.lat.toFixed(6);
-      const lng = typeof pt.wgsLng === 'number' ? pt.wgsLng.toFixed(6) : pt.lng.toFixed(6);
-      const ts = pt.time ? new Date(pt.time).toISOString() : new Date().toISOString();
-
-      // Accuracy mapped to hdop
-      let extra = '';
-      if (pt.accuracy) {
-        const hdop = Math.max(0.5, pt.accuracy / 5);
-        extra += `      <hdop>${hdop.toFixed(1)}</hdop>\n`;
-      }
-      if (pt.speed != null || pt.heading != null) {
-        let extXml = '';
-        if (pt.speed != null) extXml += `          <gpxtpx:speed>${pt.speed.toFixed(2)}</gpxtpx:speed>\n`;
-        if (pt.heading != null) extXml += `          <gpxtpx:course>${pt.heading.toFixed(1)}</gpxtpx:course>\n`;
-        extra += `      <extensions>\n        <gpxtpx:TrackPointExtension>\n${extXml}        </gpxtpx:TrackPointExtension>\n      </extensions>\n`;
-      }
-
-      trkptXml += `      <trkpt lat="${lat}" lon="${lng}">
-        <time>${ts}</time>
-${extra}      </trkpt>\n`;
+    const ok = GpxExport.export(trajectories);
+    if (ok) {
+      Toast.show('✅ 已导出 GPX（' + trajectories.length + ' 个点，' + this._getTrailDistance() + '）');
     }
-
-    const now = new Date().toISOString();
-    const gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx
-  version="1.1"
-  creator="Circlemap"
-  xmlns="http://www.topografix.com/GPX/1/1"
-  xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v2"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd
-                      http://www.garmin.com/xmlschemas/TrackPointExtension/v2 https://www8.garmin.com/xmlschemas/TrackPointExtensionv2.xsd">
-  <metadata>
-    <name>Circlemap GPS Trail</name>
-    <time>${now}</time>
-  </metadata>
-  <trk>
-    <name>Circlemap Trail</name>
-    <type>track</type>
-    <trkseg>
-${trkptXml}    </trkseg>
-  </trk>
-</gpx>`;
-
-    const blob = new Blob([gpx], { type: 'application/gpx+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `circlemap-trail-${now.slice(0, 10)}.gpx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    this._showToast(`✅ 已导出 GPX（${pts.length} 个点，${this._getTrailDistance()}）`);
   }
 
   /**
    * 计算轨迹总移动距离
    */
   _getTrailDistance() {
-    const pts = this._trailPositions;
-    if (pts.length < 2) return 0;
-    let total = 0;
-    for (let i = 1; i < pts.length; i++) {
-      total += calcDistance(
-        {lat: pts[i-1].lat, lng: pts[i-1].lng},
-        {lat: pts[i].lat, lng: pts[i].lng}
-      );
-    }
-    return total;
+    const dist = this.trail.getDistance();
+    return formatDistance(dist);
   }
 
   /**
@@ -626,22 +645,22 @@ ${trkptXml}    </trkseg>
 
     // 记录按钮
     if (btn) {
-      btn.classList.toggle('recording', this._isTrailRecording);
-      btn.innerHTML = this._isTrailRecording
+      btn.classList.toggle('recording', this.trail.isRecording);
+      btn.innerHTML = this.trail.isRecording
         ? '<span class="trail-dot"></span> 记录中...'
         : '<span class="trail-dot"></span> 开始记录';
     }
 
     // 距离
-    const dist = this._getTrailDistance();
+    const dist = this.trail.getDistance();
     if (distEl) {
       distEl.textContent = dist > 0 ? formatDistance(dist) : '0m';
     }
 
     // 操作按钮状态
-    const hasPoints = this._trailPositions.length > 0;
+    const hasPoints = this.trail.positions.length > 0;
     if (clearBtn) clearBtn.disabled = !hasPoints;
-    if (exportBtn) exportBtn.disabled = this._trailPositions.length < 2;
+    if (exportBtn) exportBtn.disabled = this.trail.positions.length < 2;
   }
 
   /* ========== 通用位置处理 ========== */
@@ -712,12 +731,13 @@ ${trkptXml}    </trkseg>
     // 保存定位信息
     this.myPosition = convPos;
     this.myPositionTime = Date.now();
+    this._isManualPosition = false; // #13 GPS 定位覆盖手动
 
     // 记录到最近列表
     this._recordFix(pos, convPos);
 
-    // 更新位置标记
-    this.mapManager.setLocation(convPos);
+    // 更新位置标记 + 精度环（#17）
+    this.mapManager.setLocation(convPos, pos.accuracy);
 
     if (this._firstFix) {
       this._firstFix = false;
@@ -738,17 +758,20 @@ ${trkptXml}    </trkseg>
         btn.classList.add('located');
         setTimeout(() => btn.classList.remove('located'), 3000);
 
-        this._showToast(`✅ 定位成功（精度 ±${pos.accuracy.toFixed(0)} 米）`);
+        Toast.show(`✅ 定位成功（精度 ±${pos.accuracy.toFixed(0)} 米）`);
         console.log('[GPS] 首次定位:', pos.lat.toFixed(4), pos.lng.toFixed(4));
       }
     } else if (this._isWatching) {
-      // 持续追踪中：只更新位置数据，不移动地图视角
       this.center = convPos;
+      // #12 — 跟随模式：每次位置更新都移动地图视角
+      if (this._followMode) {
+        this.mapManager.flyTo(convPos);
+      }
     }
 
-    // —— 记录历史轨迹（每 10m 采一个点，可开关） ——
-    if (this._isTrailRecording && (!this._lastTrailPos || calcDistance(convPos, this._lastTrailPos) > 10)) {
-      this._trailPositions.push({
+    // —— 记录历史轨迹（通过 Trail 模块，#18） ——
+    if (this.trail.isRecording) {
+      const added = this.trail.addPoint({
         lat: convPos.lat,
         lng: convPos.lng,
         wgsLat: pos.lat,
@@ -758,17 +781,18 @@ ${trkptXml}    </trkseg>
         speed: pos.speed,
         heading: pos.heading
       });
-      this._lastTrailPos = convPos;
-      if (this._trailPositions.length > 500) {
-        this._trailPositions = this._trailPositions.slice(-500);
+      if (added) {
+        this.mapManager.setTrail(this.trail.positions);
+        this._updateTrailUI();
       }
-      this.mapManager.setTrail(this._trailPositions);
-      this._updateTrailUI();
     }
 
-    // 刷新所有显示
-    this._updateStatusBar();
-    this._updateCircleList();
+    // 位移 >5m 才重建圆列表（省性能）
+    if (!this._lastDistPos || calcDistance(convPos, this._lastDistPos) > 5) {
+      this._lastDistPos = convPos;
+      this._updateCircleList(true);
+    }
+    this._updateStatusBar(true); // 刷新状态条（含 elapsed 时间）
     this._updateInfo();
   }
 
@@ -782,7 +806,7 @@ ${trkptXml}    </trkseg>
     if (Date.now() - this._lastRelocateAttempt < 5 * 60 * 1000) return;
 
     this._relocating = true;
-    this._showToast('⏳ 定位已过期，正在重新定位...');
+    Toast.show('⏳ 定位已过期，正在重新定位...');
 
     try {
       const pos = await this.gpsManager.getCurrentPosition();
@@ -790,12 +814,13 @@ ${trkptXml}    </trkseg>
 
       this.myPosition = convPos;
       this.myPositionTime = Date.now();
+      this._isManualPosition = false; // #13 GPS 定位覆盖手动
       this._recordFix(pos, convPos);
-      this.mapManager.setLocation(convPos);
+      this.mapManager.setLocation(convPos, pos.accuracy); // #17 精度环
       this._prevDistances = {}; // 重置趋势缓存
 
-      this._updateStatusBar();
-      this._updateCircleList();
+      this._updateStatusBar(true);
+      this._updateCircleList(true);
       this._updateInfo();
 
       console.log('[AutoRelocate] 重定位成功:', pos.lat.toFixed(4), pos.lng.toFixed(4));
@@ -814,8 +839,8 @@ ${trkptXml}    </trkseg>
   _clearAll() {
     this.mapManager.clearCircles();
     document.getElementById('infoArea').classList.add('hidden');
-    this._updateCircleList();
-    this._updateStatusBar();
+    this._updateCircleList(true);
+    this._updateStatusBar(true);
     this._saveState();
   }
 
@@ -848,72 +873,51 @@ ${trkptXml}    </trkseg>
   /* ============= 数据持久化 ============= */
 
   /**
-   * 保存状态到 localStorage（circles + 设置）
+   * 保存状态到 localStorage（circles + 设置）（#18 委托给 Storage 模块）
    */
   _saveState() {
-    try {
-      const data = {
-        circles: this.mapManager.getCircles().map(c => ({
-          id: c.id,
-          center: c.center,
-          maxRadius: c.maxRadius,
-          interval: c.interval
-        })),
-        selectedCircleId: this.mapManager.selectedCircleId,
-        circleRadius: this.circleRadius,
-        center: this.center
-      };
-      localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(data));
-    } catch (e) {
-      console.warn('[App] 保存状态失败:', e.message);
-    }
+    Storage.saveCircles(this.mapManager, this.circleRadius, this.center);
   }
 
   /**
-   * 从 localStorage 恢复状态（页面启动时调用）
+   * 从 localStorage 恢复状态（页面启动时调用）（#18 委托给 Storage 模块）
    */
   _loadState() {
-    try {
-      const raw = localStorage.getItem(CONFIG.STORAGE_KEY);
-      if (!raw) return;
+    const data = Storage.loadCircles();
+    if (!data) return;
 
-      const data = JSON.parse(raw);
-      if (!data) return;
+    // 恢复设置（#11 对数映射）
+    if (data.circleRadius && !isNaN(data.circleRadius)) {
+      this.circleRadius = data.circleRadius;
+      const slider = document.getElementById('radius-slider');
+      slider.value = Math.round(radiusToSlider(data.circleRadius) * (slider.max - slider.min));
+      document.getElementById('radius-input').value = data.circleRadius;
+    }
 
-      // 恢复设置
-      if (data.circleRadius && !isNaN(data.circleRadius)) {
-        this.circleRadius = data.circleRadius;
-        document.getElementById('radius-slider').value = data.circleRadius;
-        document.getElementById('radius-input').value = data.circleRadius;
+    if (data.center) {
+      this.center = data.center;
+      this.mapManager.setCenter(data.center);
+    }
+
+    // 恢复圆圈
+    if (data.circles && Array.isArray(data.circles) && data.circles.length > 0) {
+      for (const c of data.circles) {
+        this.mapManager.circles.push({
+          id: c.id,
+          center: c.center,
+          maxRadius: c.maxRadius,
+          interval: c.interval || CONFIG.CONCENTRIC_INTERVAL
+        });
       }
-
-      if (data.center) {
-        this.center = data.center;
-        this.mapManager.setCenter(data.center);
+      // 恢复选中状态
+      if (data.selectedCircleId && this.mapManager.circles.some(c => c.id === data.selectedCircleId)) {
+        this.mapManager.selectedCircleId = data.selectedCircleId;
       }
-
-      // 恢复圆圈
-      if (data.circles && Array.isArray(data.circles) && data.circles.length > 0) {
-        for (const c of data.circles) {
-          this.mapManager.circles.push({
-            id: c.id,
-            center: c.center,
-            maxRadius: c.maxRadius,
-            interval: c.interval || CONFIG.CONCENTRIC_INTERVAL
-          });
-        }
-        // 恢复选中状态
-        if (data.selectedCircleId && this.mapManager.circles.some(c => c.id === data.selectedCircleId)) {
-          this.mapManager.selectedCircleId = data.selectedCircleId;
-        }
-        this._updateInfo();
-        this._updateCircleList();
-        this._updateStatusBar();
-        this.mapManager._scheduleRedraw();
-        console.log('[App] 从 localStorage 恢复', data.circles.length, '个圆');
-      }
-    } catch (e) {
-      console.warn('[App] 恢复状态失败:', e.message);
+      this._updateInfo();
+      this._updateCircleList(true);
+      this._updateStatusBar(true);
+      this.mapManager._scheduleRedraw();
+      console.log('[App] 从 localStorage 恢复', data.circles.length, '个圆');
     }
   }
 
@@ -922,12 +926,16 @@ ${trkptXml}    </trkseg>
   /**
    * 更新顶部 GPS 状态条
    */
-  _updateStatusBar() {
+  _updateStatusBar(force) {
     if (!this._statusEl) return;
     if (!this.myPosition) {
       this._statusEl.innerHTML = '<span class="gps-dot"></span><span class="gps-offline">⊙ 未定位，点击 GPS 按钮定位</span>';
       return;
     }
+    // 2s 节流：不强制刷新时跳过高频调用
+    const now = Date.now();
+    if (!force && this._lastStatusUpdate && now - this._lastStatusUpdate < 2000) return;
+    this._lastStatusUpdate = now;
     // 找最近圆
     const circles = this.mapManager.getCircles();
     let nearest = null;
@@ -946,6 +954,7 @@ ${trkptXml}    </trkseg>
     const elapsed = this._formatElapsed();
     const stale = this._isPositionStale();
     const isTracking = this._isWatching;
+    const isManual = this._isManualPosition; // #13
     // gps-dot 状态
     let dotClass = '';
     if (stale) {
@@ -957,8 +966,30 @@ ${trkptXml}    </trkseg>
     }
     const watchingIcon = isTracking ? ' <span class="gps-tracking">◉</span>' : '';
     const staleIcon = stale ? ' <span class="gps-stale">⚠️ 已过期</span>' : '';
+    const followIcon = this._followMode ? ' <span class="gps-follow">📌 跟随中</span>' : ''; // #12
+    const manualIcon = isManual ? ' <span class="gps-manual">📍 手动定位</span>' : ''; // #15
     this._statusEl.innerHTML =
-      `<span class="${dotClass}"></span><span class="gps-online">◉ 已定位</span>${watchingIcon} <span class="gps-elapsed">(${elapsed})</span>${staleIcon}${nearStr}`;
+      `<span class="${dotClass}"></span><span class="gps-online">${isManual ? '📍' : '◉'} 已定位</span>${manualIcon}${watchingIcon}${followIcon} <span class="gps-elapsed">(${elapsed})</span>${staleIcon}${nearStr}`;
+  }
+
+  /**
+   * #12 — 点击状态条切换"地图跟随"模式
+   * 跟随模式开启时，每次位置更新都 flyTo 当前位置
+   */
+  _toggleFollowMode() {
+    if (!this.myPosition) {
+      Toast.show('📍 请先获取位置');
+      return;
+    }
+    this._followMode = !this._followMode;
+    if (this._followMode) {
+      // 开启时立即飞一次
+      this.mapManager.flyTo(this.myPosition);
+      Toast.show('📍 地图跟随已开启');
+    } else {
+      Toast.show('📍 地图跟随已关闭');
+    }
+    this._updateStatusBar(true);
   }
 
   /**
@@ -1009,7 +1040,8 @@ ${trkptXml}    </trkseg>
         }
       }
       this._prevDistances[sel.id] = dist;
-      distEl.innerHTML = `${formatDistance(dist)}${trend}${within ? ' <span class="tag-inrange">范围内</span>' : ''}${stale ? ' <span class="tag-stale">可能过期</span>' : ''}`;
+      const manualTag = this._isManualPosition ? ' <span class="tag-manual">手动</span>' : ''; // #15
+      distEl.innerHTML = `${formatDistance(dist)}${trend}${within ? ' <span class="tag-inrange">范围内</span>' : ''}${stale ? ' <span class="tag-stale">可能过期</span>' : ''}${manualTag}`;
     } else if (distEl) {
       distEl.textContent = '--';
     }
@@ -1024,16 +1056,17 @@ ${trkptXml}    </trkseg>
     this.mapManager.selectCircle(id);
     const sel = this.mapManager.getSelectedCircle();
     if (sel) {
-      // 同步半径滑块到该圆的数值
-      document.getElementById('radius-slider').value = sel.maxRadius;
+      // 同步半径滑块到该圆的数值（#11 对数映射）
+      const slider = document.getElementById('radius-slider');
+      slider.value = Math.round(radiusToSlider(sel.maxRadius) * (slider.max - slider.min));
       document.getElementById('radius-input').value = sel.maxRadius;
       this.circleRadius = sel.maxRadius;
       // 地图飞到圆心
       this.mapManager.setCenter(sel.center);
     }
     this._updateInfo();
-    this._updateCircleList();
-    this._updateStatusBar();
+    this._updateCircleList(true);
+    this._updateStatusBar(true);
   }
 
   /**
@@ -1042,13 +1075,13 @@ ${trkptXml}    </trkseg>
   _deleteCircle(id) {
     this.mapManager.removeCircle(id);
     this._updateInfo();
-    this._updateCircleList();
-    this._updateStatusBar();
+    this._updateCircleList(true);
+    this._updateStatusBar(true);
     this._saveState();
     // 清除已删除圆的趋势缓存
     delete this._prevDistances[id];
     if (this.mapManager.getCircles().length === 0) {
-      this._showToast('已清除全部');
+      Toast.show('已清除全部');
     }
   }
 
@@ -1072,15 +1105,20 @@ ${trkptXml}    </trkseg>
     // 聚焦数字输入
     document.getElementById('radius-input').focus();
     setTimeout(() => slider.classList.remove('editing'), 2000);
-    this._showToast('✏️ 拖动滑块调整半径');
+    Toast.show('✏️ 拖动滑块调整半径');
   }
 
   /**
    * 渲染圆列表
    */
-  _updateCircleList() {
+  _updateCircleList(force) {
     const circles = this.mapManager.getCircles();
     const selId = this.mapManager.selectedCircleId;
+
+    // 2s 节流
+    const now = Date.now();
+    if (!force && this._lastCircleUpdate && now - this._lastCircleUpdate < 2000) return;
+    this._lastCircleUpdate = now;
 
     if (!circles.length) {
       this._circleListEl.innerHTML = `<div class="empty-state">暂无同心圆，点击「绘制圆形」添加</div>`;
@@ -1115,7 +1153,7 @@ ${trkptXml}    </trkseg>
           }
         }
         this._prevDistances[c.id] = dist;
-        distStr = formatDistance(dist) + trend + (stale ? ' ⚠' : '');
+        distStr = formatDistance(dist) + trend + (stale ? ' ⚠' : '') + (this._isManualPosition ? ' 📍' : ''); // #15 手动标记
         distClass = within ? 'dist-within' : '';
       }
 
@@ -1163,59 +1201,36 @@ ${trkptXml}    </trkseg>
 
         if (!isNaN(radius) && radius >= CONFIG.MIN_RADIUS && radius <= CONFIG.MAX_RADIUS) {
           this.circleRadius = radius;
-          document.getElementById('radius-slider').value = radius;
+          const slider = document.getElementById('radius-slider');
+          slider.value = Math.round(radiusToSlider(radius) * (slider.max - slider.min));
           document.getElementById('radius-input').value = radius;
           this.mapManager.addCircle(this.center, radius);
           this._updateInfo();
-          this._updateCircleList();
+          this._updateCircleList(true);
         }
       }
     } catch (e) {
       // 静默忽略 URL 解析错误
     }
   }
-
-  /* ============= Toast 提示 ============= */
-
-  /**
-   * 显示短暂提示
-   */
-  _showToast(message) {
-    // 移除已有 toast
-    const existing = document.querySelector('.toast-msg');
-    if (existing) existing.remove();
-
-    const toast = document.createElement('div');
-    toast.className = 'toast-msg';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-
-    // 触发动画
-    requestAnimationFrame(() => {
-      toast.classList.add('show');
-    });
-
-    // 自动消失
-    setTimeout(() => {
-      toast.classList.remove('show');
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
-  }
 }
 
 /* ============= 启动 ============= */
 
-// DOM 就绪后启动
-document.addEventListener('DOMContentLoaded', () => {
+let _appInitialized = false;
+
+function _bootApp() {
+  if (_appInitialized) return;
+  _appInitialized = true;
   const app = new App();
   app.init();
   // 暴露到全局便于调试
   window.app = app;
-});
+}
 
-// 如果 DOM 已经加载，直接启动
+// DOM 就绪后启动（脚本在 </body> 前，readyState 为 interactive，两个路径可能都执行）
+document.addEventListener('DOMContentLoaded', _bootApp);
+
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  const app = new App();
-  app.init();
-  window.app = app;
+  _bootApp();
 }
