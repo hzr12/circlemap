@@ -240,6 +240,7 @@ input[type="number"] {
 
 /* 面板头部 */
 .panel-header {
+  position: relative;
   padding: 0 20px 10px;
   text-align: center;
 }
@@ -254,6 +255,68 @@ input[type="number"] {
   background-clip: text;
 }
 
+/* ---------- 浅色主题 ---------- */
+[data-theme="light"] {
+  --bg-primary: #f0f4f8;
+  --bg-panel: rgba(255, 255, 255, 0.96);
+  --bg-input: rgba(0, 0, 0, 0.04);
+  --bg-input-focus: rgba(0, 0, 0, 0.07);
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --border-color: rgba(0, 0, 0, 0.10);
+  --border-active: rgba(0, 212, 170, 0.6);
+  --text-primary: #1a1a2e;
+  --text-secondary: rgba(0, 0, 0, 0.50);
+  --text-tertiary: rgba(0, 0, 0, 0.32);
+  --shadow-panel: 0 -8px 40px rgba(0, 0, 0, 0.10);
+  --shadow-fab: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --bg-accent-subtle: rgba(0, 212, 170, 0.10);
+  --bg-danger-subtle: rgba(255, 71, 87, 0.08);
+  --bg-warning-subtle: rgba(255, 165, 2, 0.10);
+}
+
+[data-theme="light"] .qq-map .map-controls {
+  filter: none;
+}
+
+/* 主题切换按钮 */
+.theme-toggle {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.theme-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+.theme-toggle:active {
+  transform: translateY(-50%) scale(0.88);
+}
+
+@media (max-width: 480px) {
+  .theme-toggle {
+    right: 10px;
+    width: 30px;
+    height: 30px;
+  }
+  .theme-toggle svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
 /* ---------- GPS 状态条 ---------- */
 .gps-status {
   padding: 4px 20px 8px;
@@ -262,13 +325,36 @@ input[type="number"] {
   color: var(--text-tertiary);
   text-align: center;
   letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  cursor: pointer;
+}
+
+.gps-line1 {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.gps-line2 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  font-size: 10px;
+  font-family: var(--font-sans);
+  color: var(--text-tertiary);
 }
 
 /* GPS 圆点指示器 */
@@ -318,6 +404,12 @@ input[type="number"] {
 }
 
 .gps-elapsed {
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-weight: 400;
+}
+
+.gps-speed, .gps-altitude {
   color: var(--text-tertiary);
   font-family: var(--font-sans);
   font-weight: 400;
@@ -1252,6 +1344,10 @@ input[type="number"] {
     padding: 2px 12px 4px;
   }
 
+  .gps-line2 {
+    font-size: 9px;
+  }
+
   .action-row {
     margin-bottom: 8px;
   }
@@ -1478,7 +1574,7 @@ input[type="number"] {
   top: 24px;
   left: 50%;
   transform: translateX(-50%) translateY(-20px);
-  background: rgba(18, 28, 50, 0.92);
+  background: var(--bg-panel);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-color);

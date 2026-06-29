@@ -38,6 +38,11 @@ class App {
     this._visibilityHandler = null;   // visibilitychange 处理器引用
     this._pageHideHandler = null;     // pagehide 处理器引用
     this._pageShowHandler = null;     // pageshow 处理器引用
+    this._lastSpeed = null;           // 上次速度（m/s）
+    this._lastAltitude = null;        // 上次海拔（米）
+    this._lastCalcPos = null;         // 上一个连续定位位置（用于自行计算速度）
+    this._lastCalcTime = null;        // 上一个连续定位时间戳
+    this._theme = 'dark';             // 主题：dark | light
   }
 
   /**
@@ -68,6 +73,9 @@ class App {
 
     // 读取 URL 参数
     this._checkUrlParams();
+
+    // 恢复主题偏好
+    this._restoreTheme();
 
     // 从 localStorage 恢复数据
     this._loadState();
@@ -278,6 +286,9 @@ class App {
       this._panelCollapsed = !this._panelCollapsed;
       this._bottomPanel.classList.toggle('collapsed', this._panelCollapsed);
     });
+
+    // —— 主题切换按钮 ——
+    document.getElementById('theme-btn').addEventListener('click', () => this._toggleTheme());
 
     // —— 圆列表事件委托（选中/编辑/删除） ——
     this._circleListEl = document.getElementById('circle-list');
@@ -550,6 +561,10 @@ class App {
       this.myPosition = convPos;
       this.myPositionTime = Date.now();
       this._isManualPosition = false; // #13 GPS 定位覆盖手动
+      this._lastSpeed = pos.speed;
+      this._lastAltitude = pos.altitude;
+      this._lastCalcPos = { lat: convPos.lat, lng: convPos.lng };
+      this._lastCalcTime = pos.timestamp || Date.now();
       this._recordFix(pos, convPos);
 
       this.mapManager.setCenter(convPos);
@@ -757,6 +772,23 @@ class App {
 
     const convPos = this.mapManager.wgs84ToGcj02(pos);
 
+    // 保存速度/海拔
+    // 浏览器 speed 常为 null（尤其桌面/首次定位），用连续定位的距离/时间自行计算
+    if (pos.speed != null) {
+      this._lastSpeed = pos.speed;
+    } else if (this._lastCalcPos) {
+      const dt = (pos.timestamp || Date.now()) - this._lastCalcTime;
+      if (dt > 100) { // 至少 100ms 才计算，避免除零或噪音
+        const dist = calcDistance(this._lastCalcPos, convPos);
+        this._lastSpeed = dist / (dt / 1000); // m/s
+      }
+    } else {
+      this._lastSpeed = null;
+    }
+    this._lastAltitude = pos.altitude;
+    this._lastCalcPos = { lat: convPos.lat, lng: convPos.lng };
+    this._lastCalcTime = pos.timestamp || Date.now();
+
     // 保存定位信息
     this.myPosition = convPos;
     this.myPositionTime = Date.now();
@@ -847,6 +879,8 @@ class App {
       this.myPosition = convPos;
       this.myPositionTime = Date.now();
       this._isManualPosition = false; // #13 GPS 定位覆盖手动
+      this._lastSpeed = pos.speed;
+      this._lastAltitude = pos.altitude;
       this._recordFix(pos, convPos);
       this.mapManager.setLocation(convPos, pos.accuracy); // #17 精度环
       this._prevDistances = {}; // 重置趋势缓存
@@ -929,6 +963,53 @@ class App {
     return { dist, within, stale, trend, trendHtml };
   }
 
+  /* ============= 主题切换 ============= */
+
+  /**
+   * 恢复主题偏好
+   */
+  _restoreTheme() {
+    try {
+      const saved = localStorage.getItem('circlemap_theme');
+      if (saved === 'light' || saved === 'dark') {
+        this._theme = saved;
+      }
+    } catch (e) { /* 静默 */ }
+    document.documentElement.setAttribute('data-theme', this._theme);
+    // 等 DOM 就绪后更新按钮图标
+    if (document.readyState !== 'loading') {
+      this._updateThemeBtn();
+    } else {
+      document.addEventListener('DOMContentLoaded', () => this._updateThemeBtn());
+    }
+  }
+
+  /**
+   * 切换深色/浅色主题
+   */
+  _toggleTheme() {
+    this._theme = this._theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', this._theme);
+    try {
+      localStorage.setItem('circlemap_theme', this._theme);
+    } catch (e) { /* 静默 */ }
+    this._updateThemeBtn();
+    Toast.show(this._theme === 'light' ? '☀️ 已切换为浅色主题' : '🌙 已切换为深色主题');
+  }
+
+  /**
+   * 更新主题按钮图标
+   */
+  _updateThemeBtn() {
+    const btn = document.getElementById('theme-btn');
+    if (!btn) return;
+    const isDark = this._theme === 'dark';
+    btn.innerHTML = isDark
+      ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    btn.title = isDark ? '切换浅色主题' : '切换深色主题';
+  }
+
   /* ============= 数据持久化 ============= */
 
   /**
@@ -987,7 +1068,7 @@ class App {
   _updateStatusBar(force) {
     if (!this._statusEl) return;
     if (!this.myPosition) {
-      this._statusEl.innerHTML = '<span class="gps-dot"></span><span class="gps-offline">⊙ 未定位，点击 GPS 按钮定位</span>';
+      this._statusEl.innerHTML = '<div class="gps-line1"><span class="gps-dot"></span><span class="gps-offline">⊙ 未定位，点击 GPS 按钮定位</span></div>';
       return;
     }
     // 节流：不强制刷新时跳过高频调用
@@ -1006,8 +1087,8 @@ class App {
     if (nearest) {
       const within = nearDist <= nearest.maxRadius;
       nearStr = within
-        ? `｜最近圆 ≤ ${formatDistance(nearest.maxRadius)} ✅`
-        : `｜最近圆 ${formatDistance(nearDist)}`;
+        ? `最近圆 ≤ ${formatDistance(nearest.maxRadius)} ✅`
+        : `最近圆 ${formatDistance(nearDist)}`;
     }
     const elapsed = this._formatElapsed();
     const stale = this._isPositionStale();
@@ -1026,8 +1107,22 @@ class App {
     const staleIcon = stale ? ' <span class="gps-stale">⚠️ 已过期</span>' : '';
     const followIcon = this._followMode ? ' <span class="gps-follow">📌 跟随中</span>' : ''; // #12
     const manualIcon = isManual ? ' <span class="gps-manual">📍 手动定位</span>' : ''; // #15
+
+    // 第二行：速度 + 海拔 + 最近圆
+    const line2Parts = [];
+    if (this._lastSpeed != null) {
+      const kmh = this._lastSpeed * 3.6;
+      line2Parts.push(`<span class="gps-speed">${kmh.toFixed(1)}km/h</span>`);
+    }
+    if (this._lastAltitude != null) {
+      line2Parts.push(`<span class="gps-altitude">${Math.round(this._lastAltitude)}m</span>`);
+    }
+    if (nearStr) line2Parts.push(nearStr);
+    const line2 = line2Parts.length ? line2Parts.join(' ｜ ') : '<span style="opacity:0.5">位置待更新</span>';
+
     this._statusEl.innerHTML =
-      `<span class="${dotClass}"></span><span class="gps-online">${isManual ? '📍' : '◉'} 已定位</span>${manualIcon}${watchingIcon}${followIcon} <span class="gps-elapsed">(${elapsed})</span>${staleIcon}${nearStr}`;
+      `<div class="gps-line1"><span class="${dotClass}"></span><span class="gps-online">${isManual ? '📍' : '◉'} 已定位</span>${manualIcon}${watchingIcon}${followIcon} <span class="gps-elapsed">(${elapsed})</span>${staleIcon}</div>` +
+      `<div class="gps-line2">${line2}</div>`;
   }
 
   /**

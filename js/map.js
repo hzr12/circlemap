@@ -373,7 +373,7 @@ class MapManager {
       interval: interval || CONFIG.CONCENTRIC_INTERVAL,
       createdAt: Date.now()
     });
-    this.selectedCircleId = id;
+    // 不自动选中——创建后保持在"创建"状态，不进入编辑模式
     this._scheduleRedraw();
     this._zoomToRadius(maxRadius);
     return id;

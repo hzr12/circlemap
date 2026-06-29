@@ -119,6 +119,7 @@ class GPSManager {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
           accuracy: position.coords.accuracy,
+          altitude: position.coords.altitude,
           speed: position.coords.speed,
           heading: position.coords.heading,
           timestamp: position.timestamp
