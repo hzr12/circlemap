@@ -671,9 +671,10 @@ class MapManager {
 
     if (this.locationMarker) {
       this.locationMarker.setPosition(latLng);
-      // 当 heading 有效时刷新图标显示方向
       if (heading != null && !isNaN(heading)) {
         this.locationMarker.setIcon(this._createLocationIcon(heading));
+      } else {
+        this.locationMarker.setIcon(this._createLocationIcon());
       }
     } else {
       this.locationMarker = new qq.maps.Marker({

@@ -590,7 +590,7 @@ class App {
       this._recordFix(pos, convPos);
 
       this.mapManager.setCenter(convPos);
-      this.mapManager.setLocation(convPos, pos.accuracy); // #17 精度环
+      this.mapManager.setLocation(convPos, pos.accuracy, pos.heading); // #17 精度环
       this.mapManager.flyTo(convPos);
 
       this._latInput.value = convPos.lat.toFixed(6);
@@ -920,7 +920,7 @@ class App {
       this._lastAltitude = pos.altitude;
       this._lastAccuracy = pos.accuracy;
       this._recordFix(pos, convPos);
-      this.mapManager.setLocation(convPos, pos.accuracy); // #17 精度环
+      this.mapManager.setLocation(convPos, pos.accuracy, pos.heading); // #17 精度环
       this._prevDistances = {}; // 重置趋势缓存
 
       this._updateStatusBar(true);
@@ -1301,6 +1301,7 @@ class App {
     const undoBtn = toast.querySelector('.toast-undo-btn');
     undoBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      undoBtn.disabled = true;
       onUndo();
       toast.classList.remove('show');
       setTimeout(() => toast.remove(), CONFIG.TOAST_FADE_MS);
