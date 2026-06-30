@@ -45,6 +45,7 @@ class App {
     this._lastAccuracy = null;        // 最近一次定位精度（米），用于精度圈范围判断
     this._theme = 'dark';             // 主题：dark | light
     this._trailSmoothing = true;      // 轨迹平滑开关
+    this._processQueue = Promise.resolve(); // GPS 位置处理串行队列
   }
 
   /**
@@ -636,7 +637,11 @@ class App {
     this._gpsBtn.classList.add('watching');
     this._gpsBtn.title = '正在持续追踪位置';
 
-    this.gpsManager.onPositionChange = (pos) => this._processPosition(pos);
+    this.gpsManager.onPositionChange = (pos) => {
+      this._processQueue = this._processQueue
+        .then(() => this._processPosition(pos))
+        .catch(() => {}); // 防止队列断裂
+    };
     this.gpsManager.onError = (err) => {
       console.warn('[GPS] 追踪出错:', err.message);
       Toast.show('⚠️ GPS 追踪异常：' + err.message);

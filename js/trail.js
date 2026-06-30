@@ -42,6 +42,12 @@ class Trail {
    */
   addPoint(pt) {
     if (!pt) return false;
+    // 防御：拒绝无效坐标
+    if (typeof pt.lat !== 'number' || !isFinite(pt.lat) ||
+        typeof pt.lng !== 'number' || !isFinite(pt.lng)) {
+      console.warn('[Trail] 丢弃无效点:', pt.lat, pt.lng);
+      return false;
+    }
     if (this.lastPos && calcDistance(
       { lat: pt.lat, lng: pt.lng },
       { lat: this.lastPos.lat, lng: this.lastPos.lng }
