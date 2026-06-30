@@ -23,7 +23,7 @@ class MapManager {
 
     this.locationMarker = null; // 我的位置标记（区别于圆心标识）
     this.accuracyCircle = null; // #17 定位精度圆环
-    this.trailPolyline = null;  // 历史轨迹线
+    this.trailPolylines = [];   // 历史轨迹线（多段，按速度着色）
 
     // 回调钩子
     this.onCenterChange = null;
@@ -721,9 +721,40 @@ class MapManager {
     }
   }
 
+  // ----- 速度→色阶映射 (轨迹按速度着色) -----
+
+  /** 速度色阶表 (m/s → 颜色) */
+  _speedColorMap = {
+    slow:   { r: 80,  g: 160, b: 255, a: 0.55 },  // 0-0.5 m/s  停留/慢走 → 蓝
+    walk:   { r: 0,   g: 212, b: 170, a: 0.60 },  // 0.5-1.5    正常走 → 青
+    fast:   { r: 180, g: 200, b: 50,  a: 0.60 },  // 1.5-3.0    快走 → 黄绿
+    run:    { r: 255, g: 140, b: 40,  a: 0.70 },  // 3.0-5.0    跑 → 橙
+    sprint: { r: 255, g: 60,  b: 60,  a: 0.75 },  // >5.0       冲刺/骑车 → 红
+  };
+
   /**
-   * 更新历史轨迹线
-   * @param {Array<{lat:number,lng:number}>} positions GCJ-02 坐标数组
+   * 取速度对应的色阶键名
+   * @param {number|null|undefined} speed m/s
+   * @returns {string} slow|walk|fast|run|sprint
+   */
+  _speedColorKey(speed) {
+    if (speed == null || speed < 0.5) return 'slow';
+    if (speed < 1.5) return 'walk';
+    if (speed < 3.0) return 'fast';
+    if (speed < 5.0) return 'run';
+    return 'sprint';
+  }
+
+  /**
+   * 计算某一段轨迹的参考速度（取终点的 speed，若无则取起点）
+   */
+  _segmentSpeed(p0, p1) {
+    return p1.speed != null ? p1.speed : (p0.speed != null ? p0.speed : 0);
+  }
+
+  /**
+   * 更新历史轨迹线（按速度分段着色）
+   * @param {Array<{lat:number,lng:number,speed?:number}>} positions GCJ-02 坐标数组
    */
   setTrail(positions) {
     if (!this.map) return;
@@ -732,29 +763,56 @@ class MapManager {
       return;
     }
 
-    // 重建 Polyline（每次全量更新）
-    if (this.trailPolyline) {
-      this.trailPolyline.setMap(null);
-    }
+    this.clearTrail();
 
-    const path = positions.map(p => new qq.maps.LatLng(p.lat, p.lng));
-    this.trailPolyline = new qq.maps.Polyline({
+    let batchPath = [];       // 当前颜色段的路径
+    let batchKey = null;      // 当前颜色段对应的 speed key
+
+    for (let i = 1; i < positions.length; i++) {
+      const p0 = positions[i - 1];
+      const p1 = positions[i];
+      const key = this._speedColorKey(this._segmentSpeed(p0, p1));
+
+      if (batchPath.length === 0) {
+        batchPath.push(new qq.maps.LatLng(p0.lat, p0.lng));
+        batchPath.push(new qq.maps.LatLng(p1.lat, p1.lng));
+        batchKey = key;
+      } else if (key === batchKey) {
+        batchPath.push(new qq.maps.LatLng(p1.lat, p1.lng));
+      } else {
+        this._flushSegment(batchPath, this._speedColorMap[batchKey]);
+        batchPath = [
+          new qq.maps.LatLng(p0.lat, p0.lng),
+          new qq.maps.LatLng(p1.lat, p1.lng)
+        ];
+        batchKey = key;
+      }
+    }
+    if (batchPath.length >= 2) {
+      this._flushSegment(batchPath, this._speedColorMap[batchKey]);
+    }
+  }
+
+  /** 创建一条轨迹 Polyline 并存入数组 */
+  _flushSegment(path, clr) {
+    const poly = new qq.maps.Polyline({
       path,
-      strokeColor: new qq.maps.Color(0, 212, 170, 0.45),
+      strokeColor: new qq.maps.Color(clr.r, clr.g, clr.b, clr.a),
       strokeWeight: 3.5,
       strokeStyle: qq.maps.PolylineStrokeStyle.SOLID,
       map: this.map
     });
+    this.trailPolylines.push(poly);
   }
 
   /**
    * 清除历史轨迹线
    */
   clearTrail() {
-    if (this.trailPolyline) {
-      this.trailPolyline.setMap(null);
-      this.trailPolyline = null;
+    for (const poly of this.trailPolylines) {
+      poly.setMap(null);
     }
+    this.trailPolylines = [];
   }
 
   destroy() {
