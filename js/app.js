@@ -95,6 +95,10 @@ class App {
     // 暴露到全局，方便控制台模拟轨迹
     window._app = this;
 
+    // 天气获取
+    this._weatherHtml = '';
+    this._fetchWeather();
+
     // 进入页面后自动启动持续 GPS 追踪
     this._startWatching();
 
@@ -1413,8 +1417,25 @@ class App {
     const followIcon = this._followMode ? ' <span class="gps-follow">📌 跟随中</span>' : ''; // #12
     const manualIcon = isManual ? ' <span class="gps-manual">📍 手动定位</span>' : ''; // #15
 
-    // 第二行：速度 + 海拔 + 最近圆
+    // 信号强度（基于 GPS 精度）
+    let signalHtml = '';
+    if (this._lastAccuracy != null) {
+      let bars, label;
+      if (this._lastAccuracy <= 10) { bars = 4; label = '极好'; }
+      else if (this._lastAccuracy <= 30) { bars = 3; label = '良好'; }
+      else if (this._lastAccuracy <= 100) { bars = 2; label = '一般'; }
+      else { bars = 1; label = '弱'; }
+      signalHtml = `<span class="gps-signal" title="精度 ±${Math.round(this._lastAccuracy)}m">` +
+        `<span class="signal-bar s1${bars >= 1 ? ' on' : ''}"></span>` +
+        `<span class="signal-bar s2${bars >= 2 ? ' on' : ''}"></span>` +
+        `<span class="signal-bar s3${bars >= 3 ? ' on' : ''}"></span>` +
+        `<span class="signal-bar s4${bars >= 4 ? ' on' : ''}"></span>` +
+        `</span>`;
+    }
+
+    // 第二行：信号 + 速度 + 海拔 + 最近圆
     const line2Parts = [];
+    if (signalHtml) line2Parts.push(signalHtml);
     if (this._lastSpeed != null) {
       const kmh = this._lastSpeed * 3.6;
       line2Parts.push(`<span class="gps-speed">${kmh.toFixed(1)}km/h</span>`);
@@ -1423,6 +1444,8 @@ class App {
       line2Parts.push(`<span class="gps-altitude">${Math.round(this._lastAltitude)}m</span>`);
     }
     if (nearStr) line2Parts.push(nearStr);
+    // 天气
+    if (this._weatherHtml) line2Parts.push(this._weatherHtml);
     const line2 = line2Parts.length ? line2Parts.join(' ｜ ') : '<span style="opacity:0.5">位置待更新</span>';
 
     this._statusEl.innerHTML =
@@ -1448,6 +1471,26 @@ class App {
       Toast.show('📍 地图跟随已关闭');
     }
     this._updateStatusBar(true);
+  }
+
+  /**
+   * 获取当前天气（wttr.in，无 API key）
+   */
+  _fetchWeather() {
+    if (!navigator.onLine) return;
+    fetch('https://wttr.in/?format=j1', { signal: AbortSignal.timeout(8000) })
+      .then(r => r.json())
+      .then(data => {
+        const cur = data.current_condition?.[0];
+        if (!cur) return;
+        const temp = cur.temp_C;
+        const wind = cur.windspeedKmph;
+        const desc = cur.lang_zh?.[0]?.value || cur.weatherDesc?.[0]?.value || '';
+        const humidity = cur.humidity;
+        this._weatherHtml = `<span class="gps-weather" title="湿度 ${humidity}%">🌡${temp}°C 💨${wind}km/h${desc ? ' ' + desc : ''}</span>`;
+        this._updateStatusBar(true);
+      })
+      .catch(() => {});
   }
 
   /**

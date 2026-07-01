@@ -409,10 +409,34 @@ input[type="number"] {
   font-weight: 400;
 }
 
-.gps-speed, .gps-altitude {
+.gps-speed, .gps-altitude, .gps-weather {
   color: var(--text-tertiary);
   font-family: var(--font-sans);
   font-weight: 400;
+}
+
+/* 信号强度条 */
+.gps-signal {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 12px;
+  vertical-align: middle;
+}
+.signal-bar {
+  width: 3px;
+  background: var(--text-tertiary);
+  border-radius: 1px;
+  opacity: 0.25;
+  transition: background 0.3s;
+}
+.signal-bar.s1 { height: 3px; }
+.signal-bar.s2 { height: 5px; }
+.signal-bar.s3 { height: 8px; }
+.signal-bar.s4 { height: 11px; }
+.signal-bar.on {
+  background: var(--accent-1);
+  opacity: 1;
 }
 
 .gps-tracking {
