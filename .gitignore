@@ -13,7 +13,5 @@ Thumbs.db
 __pycache__/
 *.pyc
 
-# changelog
-CHANGELOG.md
-AGENTS.md
+# changelog — tracked in repo now
 .omo/

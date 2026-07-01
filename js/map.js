@@ -23,7 +23,7 @@ class MapManager {
 
     this.locationMarker = null; // 我的位置标记（区别于圆心标识）
     this.accuracyCircle = null; // #17 定位精度圆环
-    this.trailPolyline = null;  // 历史轨迹线
+    this.trailPolylines = [];   // 历史轨迹线（多段，按速度着色）
 
     // 回调钩子
     this.onCenterChange = null;
@@ -388,6 +388,27 @@ class MapManager {
     ctx.arc(cx, cy, isSel ? 5 : 3.5, 0, Math.PI * 2);
     ctx.fillStyle = dotFill;
     ctx.fill();
+
+    // ── 圆圈距离标注 ──
+    if (mp >= 30) {
+      const labelR = mp;
+      const labelAngle = -Math.PI / 4; // 右上角 45°
+      const lx = cx + labelR * Math.cos(labelAngle);
+      const ly = cy + labelR * Math.sin(labelAngle);
+      const label = formatDistance(maxR);
+      ctx.font = '600 10px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // 文字底色
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = isSel ? 'rgba(0, 160, 130, 0.85)' : 'rgba(15, 50, 120, 0.75)';
+      ctx.beginPath();
+      ctx.roundRect(lx - tw / 2 - 3, ly - 7, tw + 6, 14, 3);
+      ctx.fill();
+      // 文字
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, lx, ly);
+    }
   }
 
   /**
@@ -542,12 +563,45 @@ class MapManager {
    * WGS84 → GCJ-02 坐标转换（GPS 纠偏）
    * 浏览器 Geolocation 返回的是 WGS84，腾讯地图使用 GCJ-02
    *
-   * 使用纯 JS 算法（已被大量中国地图项目验证通过），
-   * 不依赖腾讯地图 convertor API（API 回调格式不一致且不可靠）。
+   * 优先使用腾讯地图官方 convertor 库（同步回调），
+   * 不可用时降级到手写纠偏算法。
+   * @param {{lat:number, lng:number}} point
+   * @returns {Promise<{lat:number, lng:number}>}
+   */
+  async wgs84ToGcj02(point) {
+    // 尝试官方 convertor 库
+    if (typeof qq !== 'undefined' && qq.maps && qq.maps.convertor) {
+      try {
+        const result = await new Promise((resolve, reject) => {
+          // 5秒超时兜底——防止 API 不回调导致 Promise 挂起阻塞串行队列
+          const timer = setTimeout(() => {
+            reject(new Error('convertor API timeout'));
+          }, 5000);
+          const latLng = new qq.maps.LatLng(point.lat, point.lng);
+          qq.maps.convertor.translate([latLng], 1, (res) => {
+            clearTimeout(timer);
+            if (res && res[0] && typeof res[0].lat === 'number' && typeof res[0].lng === 'number') {
+              resolve({ lat: res[0].lat, lng: res[0].lng });
+            } else {
+              reject(new Error('unexpected convertor response'));
+            }
+          });
+        });
+        return result;
+      } catch (e) {
+        console.warn('wgs84ToGcj02: convertor API 失败，降级到手写算法', e.message);
+      }
+    }
+    // 降级：手写纠偏算法
+    return this._wgs84Gcj02(point);
+  }
+
+  /**
+   * 手写 WGS84 → GCJ-02 纠偏算法（降级备用）
    * @param {{lat:number, lng:number}} point
    * @returns {{lat:number, lng:number}}
    */
-  wgs84ToGcj02(point) {
+  _wgs84Gcj02(point) {
     const A = 6378245.0;
     const EE = 0.00669342162296594323;
 
@@ -721,9 +775,40 @@ class MapManager {
     }
   }
 
+  // ----- 速度→色阶映射 (轨迹按速度着色) -----
+
+  /** 速度色阶表 (m/s → 颜色) */
+  _speedColorMap = {
+    slow:   { r: 80,  g: 160, b: 255, a: 0.55 },  // 0-0.5 m/s  停留/慢走 → 蓝
+    walk:   { r: 0,   g: 212, b: 170, a: 0.60 },  // 0.5-1.5    正常走 → 青
+    fast:   { r: 180, g: 200, b: 50,  a: 0.60 },  // 1.5-3.0    快走 → 黄绿
+    run:    { r: 255, g: 140, b: 40,  a: 0.70 },  // 3.0-5.0    跑 → 橙
+    sprint: { r: 255, g: 60,  b: 60,  a: 0.75 },  // >5.0       冲刺/骑车 → 红
+  };
+
   /**
-   * 更新历史轨迹线
-   * @param {Array<{lat:number,lng:number}>} positions GCJ-02 坐标数组
+   * 取速度对应的色阶键名
+   * @param {number|null|undefined} speed m/s
+   * @returns {string} slow|walk|fast|run|sprint
+   */
+  _speedColorKey(speed) {
+    if (speed == null || speed < 0.5) return 'slow';
+    if (speed < 1.5) return 'walk';
+    if (speed < 3.0) return 'fast';
+    if (speed < 5.0) return 'run';
+    return 'sprint';
+  }
+
+  /**
+   * 计算某一段轨迹的参考速度（取终点的 speed，若无则取起点）
+   */
+  _segmentSpeed(p0, p1) {
+    return p1.speed != null ? p1.speed : (p0.speed != null ? p0.speed : 0);
+  }
+
+  /**
+   * 更新历史轨迹线（按速度分段着色）
+   * @param {Array<{lat:number,lng:number,speed?:number}>} positions GCJ-02 坐标数组
    */
   setTrail(positions) {
     if (!this.map) return;
@@ -732,28 +817,109 @@ class MapManager {
       return;
     }
 
-    // 重建 Polyline（每次全量更新）
-    if (this.trailPolyline) {
-      this.trailPolyline.setMap(null);
-    }
+    this.clearTrail();
 
-    const path = positions.map(p => new qq.maps.LatLng(p.lat, p.lng));
-    this.trailPolyline = new qq.maps.Polyline({
+    let batchPath = [];       // 当前颜色段的路径
+    let batchKey = null;      // 当前颜色段对应的 speed key
+
+    for (let i = 1; i < positions.length; i++) {
+      const p0 = positions[i - 1];
+      const p1 = positions[i];
+      const key = this._speedColorKey(this._segmentSpeed(p0, p1));
+
+      if (batchPath.length === 0) {
+        batchPath.push(new qq.maps.LatLng(p0.lat, p0.lng));
+        batchPath.push(new qq.maps.LatLng(p1.lat, p1.lng));
+        batchKey = key;
+      } else if (key === batchKey) {
+        batchPath.push(new qq.maps.LatLng(p1.lat, p1.lng));
+      } else {
+        this._flushSegment(batchPath, this._speedColorMap[batchKey]);
+        batchPath = [
+          new qq.maps.LatLng(p0.lat, p0.lng),
+          new qq.maps.LatLng(p1.lat, p1.lng)
+        ];
+        batchKey = key;
+      }
+    }
+    if (batchPath.length >= 2) {
+      this._flushSegment(batchPath, this._speedColorMap[batchKey]);
+    }
+  }
+
+  /** 创建一条轨迹 Polyline 并存入数组 */
+  _flushSegment(path, clr) {
+    const poly = new qq.maps.Polyline({
       path,
-      strokeColor: new qq.maps.Color(0, 212, 170, 0.45),
+      strokeColor: new qq.maps.Color(clr.r, clr.g, clr.b, clr.a),
       strokeWeight: 3.5,
-      strokeStyle: qq.maps.PolylineStrokeStyle.SOLID,
       map: this.map
     });
+    this.trailPolylines.push(poly);
   }
 
   /**
    * 清除历史轨迹线
    */
   clearTrail() {
-    if (this.trailPolyline) {
-      this.trailPolyline.setMap(null);
-      this.trailPolyline = null;
+    for (const poly of this.trailPolylines) {
+      poly.setMap(null);
+    }
+    this.trailPolylines = [];
+  }
+
+  // ----- 对方位置标记 -----
+
+  /**
+   * 创建对方位置标记图标（橙色实心圆点）
+   */
+  _createTargetIcon() {
+    const svg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">',
+      '  <defs>',
+      '    <filter id="ts" x="-20%" y="-20%" width="140%" height="140%">',
+      '      <feDropShadow dx="0" dy="1" stdDeviation="3" flood-opacity="0.5"/>',
+      '    </filter>',
+      '  </defs>',
+      '  <circle cx="20" cy="20" r="17" fill="none" stroke="#FF8C00" stroke-width="1.5" opacity="0.2"/>',
+      '  <circle cx="20" cy="20" r="13" fill="none" stroke="#FF8C00" stroke-width="2" opacity="0.35"/>',
+      '  <circle cx="20" cy="20" r="7" fill="#FF8C00" stroke="#fff" stroke-width="2.5" filter="url(#ts)"/>',
+      '  <circle cx="20" cy="20" r="2.5" fill="#fff" opacity="0.95"/>',
+      '</svg>'
+    ].join('\n');
+    const dataUri = 'data:image/svg+xml;base64,' + btoa(svg);
+    return new qq.maps.MarkerImage(
+      dataUri,
+      new qq.maps.Size(40, 40),
+      new qq.maps.Point(0, 0),
+      new qq.maps.Point(20, 20),
+      new qq.maps.Size(40, 40)
+    );
+  }
+
+  /**
+   * 设置/更新对方位置标记
+   * @param {{lat:number, lng:number}|null} center 坐标，null 则清除
+   */
+  setTarget(center) {
+    if (!this.map) return;
+    if (!center) {
+      if (this.targetMarker) {
+        this.targetMarker.setMap(null);
+        this.targetMarker = null;
+      }
+      return;
+    }
+    const latLng = new qq.maps.LatLng(center.lat, center.lng);
+    if (this.targetMarker) {
+      this.targetMarker.setPosition(latLng);
+    } else {
+      this.targetMarker = new qq.maps.Marker({
+        position: latLng,
+        map: this.map,
+        draggable: false,
+        icon: this._createTargetIcon()
+      });
     }
   }
 
@@ -770,6 +936,10 @@ class MapManager {
     if (this.locationMarker) {
       this.locationMarker.setMap(null);
       this.locationMarker = null;
+    }
+    if (this.targetMarker) {
+      this.targetMarker.setMap(null);
+      this.targetMarker = null;
     }
     this._offCanvas = null;
     this.map = null;
