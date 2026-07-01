@@ -541,6 +541,8 @@ class App {
     this._updateInfo();
     this._dirty = true;
     this._saveState();
+    // 手动定位也刷新天气
+    this._fetchWeather();
   }
 
   /**
@@ -1016,6 +1018,9 @@ class App {
     // 记录到最近列表
     this._recordFix(pos, convPos);
 
+    // GPS 定位成功后刷新天气（使用精确坐标）
+    this._fetchWeather();
+
     // 更新位置标记 + 精度环（#17）
     this.mapManager.setLocation(convPos, pos.accuracy, pos.heading);
 
@@ -1478,7 +1483,42 @@ class App {
    */
   _fetchWeather() {
     if (!navigator.onLine) return;
-    fetch('https://wttr.in/?format=j1', { signal: AbortSignal.timeout(8000) })
+    // 主用小米天气，备用 wttr.in
+    this._fetchWeatherXiaomi()
+      .catch(() => this._fetchWeatherWttr());
+  }
+
+  /**
+   * 小米天气 API（主用）
+   * sign/appKey 为固定公开值，无需申请
+   */
+  _fetchWeatherXiaomi() {
+    const pos = this.myPosition;
+    const lat = pos?.lat || 0;
+    const lng = pos?.lng || 0;
+    const url = `https://weatherapi.market.xiaomi.com/wtr-v3/weather/all?latitude=${lat}&longitude=${lng}&sign=zUFJoAR2ZVrDy1vF3D07&appKey=weather20151024&isGlobal=false&locale=zh_cn&days=1`;
+    return fetch(url, { signal: AbortSignal.timeout(5000) })
+      .then(r => r.json())
+      .then(data => {
+        const cur = data.current;
+        if (!cur) throw new Error('no data');
+        const temp = cur.temperature;
+        const humidity = cur.humidity;
+        const wind = cur.wind?.value || '';
+        const desc = cur.weather?.typeName || '';
+        const feelsLike = cur.feelsLike || '';
+        const humidityText = humidity ? ` 湿度${humidity}%` : '';
+        const feelsText = feelsLike ? ` 体感${feelsLike}°` : '';
+        this._weatherHtml = `<span class="gps-weather" title="湿度 ${humidity}%${feelsText}">🌡${temp}°C 💨${wind}${humidityText}${desc ? ' ' + desc : ''}</span>`;
+        this._updateStatusBar(true);
+      });
+  }
+
+  /**
+   * wttr.in 备用天气
+   */
+  _fetchWeatherWttr() {
+    return fetch('https://wttr.in/?format=j1', { signal: AbortSignal.timeout(8000) })
       .then(r => r.json())
       .then(data => {
         const cur = data.current_condition?.[0];
