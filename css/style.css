@@ -416,12 +416,13 @@ input[type="number"] {
 }
 
 .gps-weather {
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-family: var(--font-sans);
-  font-weight: 400;
-  background: var(--bg-hover);
+  font-weight: 500;
+  background: var(--bg-input);
   padding: 2px 8px;
   border-radius: var(--radius-full);
+  border: 1px solid var(--border-color);
 }
 
 /* 信号强度条 */
