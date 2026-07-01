@@ -1491,13 +1491,16 @@ class App {
   /**
    * 小米天气 API（主用）
    * sign/appKey 为固定公开值，无需申请
+   * 使用 CORS 代理绕过跨域限制
    */
   _fetchWeatherXiaomi() {
     const pos = this.myPosition;
     const lat = pos?.lat || 0;
     const lng = pos?.lng || 0;
-    const url = `https://weatherapi.market.xiaomi.com/wtr-v3/weather/all?latitude=${lat}&longitude=${lng}&sign=zUFJoAR2ZVrDy1vF3D07&appKey=weather20151024&isGlobal=false&locale=zh_cn&days=1`;
-    return fetch(url, { signal: AbortSignal.timeout(5000) })
+    const apiUrl = `https://weatherapi.market.xiaomi.com/wtr-v3/weather/all?latitude=${lat}&longitude=${lng}&sign=zUFJoAR2ZVrDy1vF3D07&appKey=weather20151024&isGlobal=false&locale=zh_cn&days=1`;
+    // 使用 corsproxy.io 代理（免费，无需 API key）
+    const url = `https://corsproxy.io/?url=${encodeURIComponent(apiUrl)}`;
+    return fetch(url, { signal: AbortSignal.timeout(8000) })
       .then(r => r.json())
       .then(data => {
         const cur = data.current;
