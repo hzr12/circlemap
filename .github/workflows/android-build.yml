@@ -44,7 +44,13 @@ jobs:
         working-directory: native
         run: npx cap add android || true
 
-      - name: Sync web assets (from project root)
+      - name: Copy web assets to native/web/
+        run: |
+          mkdir -p native/web
+          cp -R index.html js css native/web/
+          ls -la native/web/
+
+      - name: Sync web assets to Android project
         working-directory: native
         run: npx cap sync android
 

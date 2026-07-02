@@ -1,7 +1,7 @@
 {
   "appId": "com.hzr.circlemap",
-  "appName": "Circlemap",
-  "webDir": "..",
+  "appName": "Circlemap-CN",
+  "webDir": "web",
   "server": {
     "hostname": "localhost",
     "androidScheme": "https"
