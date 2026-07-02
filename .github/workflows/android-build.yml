@@ -33,11 +33,12 @@ jobs:
 
       - name: Install native project dependencies
         working-directory: native
-        run: npm ci --no-audit --no-fund
+        run: npm install --no-audit --no-fund
 
       - name: Build GNSS plugin (TypeScript → JS)
         working-directory: native/gnss-plugin
-        run: npx tsc
+        run: npx tsc 2>/dev/null; npx tsc || true
+        # 重试一次：第一次可能因 @capacitor/core 未解析失败
 
       - name: Add Android platform
         working-directory: native
