@@ -1482,13 +1482,15 @@ class App {
       line2Parts.push(`<span class="gps-altitude">${Math.round(this._lastAltitude)}m</span>`);
     }
     if (nearStr) line2Parts.push(nearStr);
-    // 天气
-    if (this._weatherHtml) line2Parts.push(this._weatherHtml);
     const line2 = line2Parts.length ? line2Parts.join(' ｜ ') : '<span style="opacity:0.5">位置待更新</span>';
+
+    // 第三行：天气
+    const line3 = this._weatherHtml ? `<div class="gps-line2">${this._weatherHtml}</div>` : '';
 
     this._statusEl.innerHTML =
       `<div class="gps-line1"><span class="${dotClass}"></span><span class="gps-online">${isManual ? '📍' : '◉'} 已定位</span>${manualIcon}${watchingIcon}${followIcon} <span class="gps-elapsed">(${elapsed})</span>${staleIcon}</div>` +
-      `<div class="gps-line2">${line2}</div>`;
+      `<div class="gps-line2">${line2}</div>` +
+      line3;
   }
 
   /**
